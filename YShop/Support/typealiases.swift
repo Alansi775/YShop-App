@@ -5,3 +5,4 @@
 //  Created by Mohammed on 26.12.2024.
 //
 
+typealias ButtonAction = () -> Void
