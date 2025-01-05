@@ -13,7 +13,7 @@ struct ProductItemView: View {
     var body: some View {
         
         NavigationLink {
-            ProductDetailsView(product: product)
+            ProductDetailsView(product: product1)
         } label: {
             VStack {
                 Image(product.image[0])

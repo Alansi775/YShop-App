@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import Firebase
+import FirebaseAuth
 
 struct SideMenuViewTemp: View {
     @State var presentSideMenu = true
@@ -31,133 +33,153 @@ struct SideMenuViewTemp_Previews: PreviewProvider {
 struct SideMenuViewContents: View {
     @Binding var presentSideMenu: Bool
     
-    var categories = [Categories.All.rawValue, Categories.Apparel.rawValue, Categories.Dress.rawValue, Categories.TShirt.rawValue, Categories.Bag.rawValue]
-    
     @State private var selectedCategory: Int = 0
-    
+    @State private var name: String = ""
+    @State private var surname: String = ""
+
+    var categories = ["All", "Apparel", "Dress", "T-Shirt", "Bag"]
+
     var body: some View {
-        HStack {
-            ZStack {
-                VStack(alignment: .leading) {
-                    SideMenuTopView()
-                    HStack(spacing: 10) {
-                        GenderView(isSelected: selectedCategory == 0, title: "WOMEN")
-                            .onTapGesture {
-                                selectedCategory = 0
-                            }
-                        GenderView(isSelected: selectedCategory == 1, title: "MEN")
-                            .onTapGesture {
-                                selectedCategory = 1
-                            }
-                        GenderView(isSelected: selectedCategory == 2, title: "KIDS")
-                            .onTapGesture {
-                                selectedCategory = 2
-                            }
-                    }
-                    .frame(maxWidth: .infinity)
-                    
-                    ForEach(0..<categories.count, id: \.self) { i in
-                        CategoryItem(title: categories[i]) {
-                            
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    Button {
-                        
-                    } label: {
-                        HStack {
-                            Image("Call")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
-                            Text("(+90) 39 255 4609")
-                                .font(tenorSans(16))
-                                .foregroundColor(.black)
-                            
-                        }
-                        .padding(.leading, 30)
-                        .padding(.top, 20)
-                        
-                    }
-
-                    Button {
-                        
-                    } label: {
-                        HStack {
-                            Image("Location")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
-                            Text("Store locator")
-                                .font(tenorSans(16))
-                                .foregroundColor(.black)
-                            
-                        }
-                        .padding(.leading, 30)
-                        .padding(.top, 20)
-                        
-                    }
-
-                    VStack(alignment: .center) {
-                        Image("Divider")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 140)
-                            .padding(.top, 10)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 20)
-                    
-                    HStack(spacing: 30) {
-                        Spacer()
-                        Image("Twitter")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
-                        
-                        Image("YouTube")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
-                        
-                        Image("Instagram")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
-                        Spacer()
-                    }
-                    .padding(.top, 20)
-                    .padding(.bottom, 20)
-                    
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }.padding([.leading, .trailing], 20)
-    }
-    
-    func SideMenuTopView() -> some View {
-        VStack {
+        VStack(alignment: .leading, spacing: 20) {
+            // Top Section: Account Info and Close Button
             HStack {
-                
+                VStack(alignment: .leading, spacing: 4) {
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .frame(width: 40, height: 40)
+                        .foregroundColor(.gray)
+
+                    Text("\(name) \(surname)")
+                        .font(Font.custom("TenorSans", size: 16))
+                        .foregroundColor(.black)
+
+                    Text("Account")
+                        .font(Font.custom("TenorSans", size: 14))
+                        .foregroundColor(.gray)
+                }
+
+                Spacer()
+
                 Button {
                     presentSideMenu.toggle()
                 } label: {
-                    Image("Close")
+                    Image(systemName: "xmark")
                         .resizable()
-                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 20, height: 20)
+                        .foregroundColor(.black)
                 }
-                .frame(width: 34, height: 34)
-                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 40)
+
+            // Categories Section
+            HStack(spacing: 10) {
+                GenderView(isSelected: selectedCategory == 0, title: "WOMEN")
+                    .onTapGesture {
+                        selectedCategory = 0
+                    }
+                GenderView(isSelected: selectedCategory == 1, title: "MEN")
+                    .onTapGesture {
+                        selectedCategory = 1
+                    }
+                GenderView(isSelected: selectedCategory == 2, title: "KIDS")
+                    .onTapGesture {
+                        selectedCategory = 2
+                    }
+            }
+            .padding(.horizontal)
+
+            ForEach(categories, id: \.self) { category in
+                CategoryItem(title: category) {
+                    // Category action
+                }
+            }
+
+            Spacer()
+
+            // Store Section
+            VStack(spacing: 10) {
+                Button {
+                    // Call action
+                } label: {
+                    HStack {
+                        Image(systemName: "phone.fill")
+                            .resizable()
+                            .frame(width: 20, height: 20)
+                            .foregroundColor(.gray)
+
+                        Text("(+90) 39 255 4609")
+                            .font(Font.custom("TenorSans", size: 16))
+                            .foregroundColor(.black)
+                    }
+                }
+
+                Button {
+                    // Store locator action
+                } label: {
+                    HStack {
+                        Image(systemName: "mappin.circle.fill")
+                            .resizable()
+                            .frame(width: 20, height: 20)
+                            .foregroundColor(.gray)
+
+                        Text("Store Locator")
+                            .font(Font.custom("TenorSans", size: 16))
+                            .foregroundColor(.black)
+                    }
+                }
+            }
+            .padding(.horizontal)
+
+            Spacer()
+
+            // Logout Button
+            Button {
+                logout()
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.backward.square")
+                        .resizable()
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(.BodyGrey)
+
+                    Text("Logout")
+                        .font(Font.custom("TenorSans", size: 16))
+                        .foregroundColor(.red)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 20)
+        }
+        .padding([.leading, .trailing], 20)
+        .background(Color.white)
+        .onAppear {
+            fetchUserData()
+        }
+    }
+
+    func fetchUserData() {
+        // Replace this with Firestore data fetching
+        let userId = Auth.auth().currentUser?.uid ?? ""
+        let userRef = Firestore.firestore().collection("users").document(userId)
+        userRef.getDocument { snapshot, error in
+            if let data = snapshot?.data() {
+                name = data["name"] as? String ?? "Unknown"
+                surname = data["surname"] as? String ?? "User"
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.leading, 10)
-        .padding(.top, 40)
-        .padding(.bottom, 30)
     }
-    
+
+    func logout() {
+        do {
+            try Auth.auth().signOut()
+            presentSideMenu = false // Close side menu
+            // Navigate back to the sign-in screen if needed
+        } catch let error as NSError {
+            print("Logout failed: \(error.localizedDescription)")
+        }
+    }
+
     @ViewBuilder
     func CategoryItem(title: String, action: @escaping (() -> Void)) -> some View {
         Button {
@@ -165,14 +187,11 @@ struct SideMenuViewContents: View {
         } label: {
             VStack(alignment: .leading) {
                 Text(title)
-                    .font(tenorSans(16))
+                    .font(Font.custom("TenorSans", size: 16))
                     .foregroundColor(.BodyGrey)
             }
         }
         .frame(height: 50)
         .padding(.leading, 30)
-        .padding(.top, 10)
-
     }
-    
 }

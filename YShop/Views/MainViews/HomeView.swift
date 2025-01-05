@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Firebase
 
 struct HomeView: View {
     
@@ -23,6 +24,7 @@ struct HomeView: View {
                 ZStack {
                     VStack(spacing: 0) {
                         ScrollView(.vertical) {
+
                             HeroImageView()
                             NewArrivalView()
                             Image("Brand")
