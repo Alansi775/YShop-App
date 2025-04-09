@@ -24,7 +24,9 @@ the project still under process now.
 * **Frontend:** Built using SwiftUI for both store owner and customer interfaces.
 * **Backend:**  (Node.js MySQL, AWS, Firebase)
 * **AI Model:**  CNN model trained on a dataset of compliant and non-compliant products.
-* **Drone System:**  Drone system controlled by a Pixhawk ( Under Process Project ). Drone Viedo: https://www.youtube.com/watch?v=G9KZVz2MjMk  OpenCv with Drone Viedo: https://www.youtube.com/watch?v=9puBDk01-_s
+* **Drone System:**  Drone system controlled by a Pixhawk ( Under Process Project ).
+*  Drone Viedo: https://www.youtube.com/watch?v=G9KZVz2MjMk
+*  OpenCv ComputerVision with Drone Viedo: https://www.youtube.com/watch?v=9puBDk01-_s
 
 ## Screenshots:
 
