@@ -1,301 +1,277 @@
-# 🛍️ YShop - Advanced E-Commerce Platform with AI & Autonomous Drone Delivery
+# YShop - Advanced E-Commerce Platform with AI & Autonomous Drone Delivery
 
-> A next-generation e-commerce ecosystem combining **SwiftUI/iOS**, **Flutter**, **AI-powered product verification**, and **autonomous drone delivery** via Pixhawk technology.
+A next-generation e-commerce ecosystem combining native iOS development (SwiftUI), Flutter, AI-powered product verification, and autonomous drone delivery via Pixhawk technology.
 
-![YShop Badge](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=flat-square)
 ![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Flutter-blue?style=flat-square)
-![License](https://img.shields.io/badge/License-Proprietary-orange?style=flat-square)
+![Version](https://img.shields.io/badge/Version-2.0-blue?style=flat-square)
 
 ---
 
-## 📱 Overview
+## Overview
 
 YShop is a comprehensive e-commerce platform designed for the modern digital marketplace. The platform features dual mobile applications (iOS with SwiftUI and Flutter), intelligent AI-based product compliance, real-time store browsing with smart polling, and innovative autonomous drone delivery systems.
 
-**Current Focus:** Native iOS development with SwiftUI, featuring real-time store data synchronization and seamless multi-vendor integration.
+Current development focus is on native iOS implementation with SwiftUI, featuring real-time store data synchronization and seamless multi-vendor integration.
 
 ---
 
-## ✨ Core Features
+## Core Features
 
-### 🏪 **For Customers**
-- **Multi-platform access** - iOS (SwiftUI) and Flutter apps
-- **Smart store discovery** - Browse 4+ store categories (Food, Pharmacy, Clothes, Markets)
-- **Real-time updates** - Instant store status changes via intelligent polling (30-second refresh)
-- **Beautiful UI** - Liquid glass design, adaptive dark/light modes, hero carousels
-- **Secure authentication** - JWT tokens with Keychain encryption
-- **AI-assisted search** - Powered by OpenAI integration
+### Customer Features
+- Multi-platform access via iOS (SwiftUI) and Flutter applications
+- Smart store discovery with dynamic category browsing (Food, Pharmacy, Clothes, Markets)
+- Real-time store status updates via intelligent polling mechanism
+- Responsive user interface with adaptive dark and light mode support
+- Secure authentication using JWT tokens with Keychain encryption
+- AI-assisted search and recommendations
 
-### 🏢 **For Store Owners**
-- **Store management dashboard** - Create, edit, and manage store listings
-- **Product catalog** - Upload products with AI compliance verification
-- **Inventory tracking** - Real-time stock management
-- **Order management** - View and process customer orders
-- **Performance analytics** - Sales tracking and customer insights
+### Store Owner Features
+- Comprehensive store management dashboard with creation and editing capabilities
+- Product catalog management with image uploads and descriptions
+- Real-time inventory tracking and stock management
+- Order processing and fulfillment tracking
+- Performance analytics and sales metrics
 
-### 🤖 **AI & Automation**
-- **CNN-based product verification** - Automatic compliance checking for all product listings
-- **Smart content moderation** - Ensures platform standards are maintained
-- **AI chatbot assistance** - Customer support automation
-- **Computer vision integration** - OpenCV-powered image analysis
+### Intelligence & Automation
+- CNN-based product verification for automatic compliance checking
+- Intelligent content moderation to maintain platform standards
+- AI chatbot assistance for customer support
+- Computer vision integration for image analysis
 
-### 🚁 **Autonomous Drone Delivery**
-- **Pixhawk-controlled drones** - Autonomous navigation to delivery locations
-- **Real-time tracking** - GPS-based order tracking
-- **Smart routing** - Optimized delivery paths
-- **Safety systems** - Obstacle avoidance and emergency protocols
+### Autonomous Delivery
+- Pixhawk-controlled autonomous drones for last-mile delivery
+- Real-time GPS tracking and order status updates
+- Intelligent route optimization and scheduling
+- Safety protocols including obstacle avoidance and emergency systems
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-### **Frontend**
+### Frontend - iOS (SwiftUI)
 
-#### iOS (SwiftUI) - **Primary Focus**
 ```
 YShop-App/
 ├── Views/
-│   ├── Auth/ (Login, Signup flows)
-│   ├── Home/ (Hero carousel, category browsing)
-│   └── CategoryStoresView.swift (Real-time store grid)
+│   ├── Auth/ (Login and signup flows)
+│   ├── Home/ (Hero carousel and category browsing)
+│   └── CategoryStoresView.swift (Real-time store grid with polling)
 ├── Services/
-│   ├── StoreService.swift (API integration)
-│   ├── StoreUpdateService.swift (Smart polling)
-│   ├── AuthService.swift (Authentication)
+│   ├── StoreService.swift (API integration for store data)
+│   ├── StoreUpdateService.swift (Smart polling implementation)
+│   ├── AuthService.swift (User authentication)
 │   └── AIService.swift (ChatGPT integration)
 ├── Models/
-│   ├── Store.swift (Mutable status for real-time updates)
-│   ├── User.swift
-│   └── Product.swift
-└── Core/ (Utilities, theme, networking)
+│   ├── Store.swift (Store data model with mutable status)
+│   ├── User.swift (User authentication model)
+│   └── Product.swift (Product catalog model)
+└── Core/ (Utilities, theme, and networking)
 ```
 
-**Tech Stack:** SwiftUI, Combine, URLSession, Keychain Security
+Technology Stack: SwiftUI, Combine framework, URLSession, Keychain Security
 
-#### Flutter (Cross-platform)
-- Full feature parity with iOS
-- Material Design 3
-- State management with Provider/Riverpod
+### Frontend - Flutter
 
-### **Backend**
+Full feature parity with iOS implementation using Material Design 3 and state management with Provider/Riverpod patterns.
+
+### Backend Architecture
 
 ```
 Node.js + Express
 ├── Routes/
-│   ├── /api/v1/auth/* (Authentication)
-│   ├── /api/v1/stores/* (Store management)
-│   ├── /api/v1/products/* (Product catalog)
-│   └── /api/v1/stores/updates-since/:timestamp (Real-time updates)
-├── Controllers/ (Business logic)
-├── Models/ (MySQL ORM)
-└── Middleware/ (Auth, validation)
+│   ├── /api/v1/auth/* (User authentication endpoints)
+│   ├── /api/v1/stores/* (Store management endpoints)
+│   ├── /api/v1/products/* (Product catalog endpoints)
+│   └── /api/v1/stores/updates-since/:timestamp (Real-time update polling)
+├── Controllers/ (Business logic implementation)
+├── Models/ (MySQL data models)
+└── Middleware/ (Authentication, validation, error handling)
 ```
 
-**Services:** MySQL, Firebase, Gmail APIs, OpenAI
+Infrastructure: MySQL database, Firebase integration, AWS S3 for media storage, Gmail API for email services, OpenAI API for AI features
 
 ---
 
-## 📊 Screenshots & Demos
+## Screenshots and Demonstrations
 
-### iOS (SwiftUI)
+Complete design documentation and screenshots available in the project design system:
+[YShop Design & Implementation - Notion](https://slender-forsythia-e75.notion.site/YShop-E-Commerce-APP-172883fb9e358081adb7d402501eac5f)
 
-| Feature | Screenshot |
-|---------|-----------|
-| **Home Screen** | [Hero Carousel with Category Navigation](#home) |
-| **Category Browsing** | [Store Grid with Liquid Glass UI](#stores) |
-| **Store Details** | [Full Store Information & Products](#details) |
-| **Real-time Updates** | [Smart Polling Demo](#updates) |
-
-### Flutter
-
-| Feature | Screenshot |
-|---------|-----------|
-| **Dashboard** | [Main Navigation & Store Cards](#flutter-dashboard) |
-| **Product Browsing** | [Category & Search Interface](#flutter-products) |
-| **Order Management** | [Order History & Tracking](#flutter-orders) |
-
-**📸 Full Screenshots & Design System:**
-👉 [YShop Design & Screenshots - Notion](https://slender-forsythia-e75.notion.site/YShop-E-Commerce-APP-172883fb9e358081adb7d402501eac5f)
+The Notion workspace includes:
+- iOS interface mockups and final implementations
+- Flutter application screenshots
+- Component library (liquid glass, navigation, cards)
+- User flow documentation
+- Accessibility guidelines
 
 ---
 
-## 🚁 Drone Delivery System
+## Drone Delivery System
 
-YShop integrates a sophisticated autonomous drone delivery network powered by **Pixhawk flight controller** technology.
+YShop implements a proprietary autonomous delivery network utilizing Pixhawk flight controllers and advanced autonomous navigation algorithms.
 
-### **Features:**
-- **Autonomous navigation** - GPS-guided delivery routes
-- **Real-time tracking** - Live order status and drone location
-- **Smart scheduling** - Optimal delivery window selection
-- **Safety protocols** - Collision avoidance and emergency landing
-- **Weather adaptation** - Intelligent flight planning
+### System Capabilities
+- Autonomous GPS-guided delivery to customer locations
+- Real-time order tracking and status updates
+- Weather-aware flight planning and execution
+- Collision avoidance and obstacle detection systems
+- Scheduled delivery windows with traffic optimization
 
-### **Demo Videos:**
-- 🎥 [Drone Delivery System Overview](https://www.youtube.com/watch?v=G9KZVz2MjMk)
-- 🎥 [OpenCV Vision Integration with Drone](https://www.youtube.com/watch?v=9puBDk01-_s)
+### References
+Drone Delivery System Overview: https://www.youtube.com/watch?v=G9KZVz2MjMk
+
+OpenCV Computer Vision Integration: https://www.youtube.com/watch?v=9puBDk01-_s
 
 ---
 
-## 🔧 Tech Stack Details
+## Technology Requirements
 
-### **iOS Requirements**
-- iOS 14.0+
-- Xcode 13.0+
-- Swift 5.5+
+### iOS Development
 
-### **Dependencies**
+- iOS 14.0 or later
+- Xcode 13.0 or later
+- Swift 5.5 or later
 - SwiftUI framework
-- Combine for reactive programming
-- Security framework (Keychain)
-- URLSession for networking
+- URLSession for HTTP networking
+- Keychain Services for secure storage
 
-### **Backend Stack**
-- **Runtime:** Node.js 16+
-- **Database:** MySQL 8.0+
-- **Cache:** Redis (optional)
-- **Cloud:** Firebase, AWS S3
-- **AI/ML:** OpenAI API, TensorFlow (CNN models)
+### Backend Requirements
+
+- Node.js 16 or later
+- MySQL 8.0 or later
+- Firebase account for authentication
+- AWS S3 credentials for media storage
+- OpenAI API key for AI features
 
 ---
 
-## 🚀 Getting Started
+## Setup and Installation
 
-### **iOS Setup**
+### iOS Development Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/yourusername/YShop-App.git
 cd YShop-App
 
-# Open in Xcode
+# Open Xcode project
 open YShop.xcodeproj
 
-# Configure local backend URL
-# Edit YShop/Core/Network/APIClient.swift
-let baseURL = "http://10.155.83.72:3000/api/v1"
-
-# Build and run
-# Cmd + R in Xcode
+# Update backend URL in YShop/Core/Network/APIClient.swift
+# Configure for your local development environment
 ```
 
-### **Backend Setup**
+### Backend Development Setup
 
 ```bash
 cd YshopProjectFlutter/backend
 
-# Install dependencies
 npm install
 
-# Configure environment
+# Create .env file with configuration
 cp .env.example .env
-# Edit .env with your MySQL credentials
 
-# Start development server
+# Configure MySQL credentials and API keys in .env
 npm run dev
-# Server running on http://localhost:3000
+
+# Server starts on http://localhost:3000
 ```
 
 ---
 
-## 📈 Current Development Status
+## Development Status
 
-### ✅ Completed (v1.0)
-- iOS SwiftUI authentication system
-- Home screen with hero carousel (4 products)
-- Category browsing with dynamic filtering
-- Store listing grid with real-time updates
-- Smart polling service (30-second intervals)
-- Liquid glass UI components with dark mode
-- Database with 7+ demo stores
-- Backend API endpoints for public store access
+### Completed (v2.0)
+- Authentication system with JWT tokens and Keychain storage
+- Home screen with hero carousel featuring 4 rotating products
+- Category filtering with dynamic store discovery
+- Store listing grid with responsive layout
+- Real-time store updates via smart polling mechanism
+- Fully adaptive UI with dark and light mode support
+- Database seeding with 7+ demonstration stores
+- Public API endpoints for store data retrieval
 
-### 🟡 In Progress
-- Product detail views and filters
-- Shopping cart implementation
-- Checkout flow with payment integration
-- User profile management
-- Order history and tracking
+### In Development
+- Product detail views and advanced filtering
+- Shopping cart implementation and management
+- Checkout flow with payment gateway integration
+- User profile management and preferences
+- Order history and delivery tracking interface
 
-### 📋 Upcoming
-- Add-to-cart functionality
-- Payment gateway integration (Visa, Apple Pay, OneCash)
-- Advanced search and recommendations
-- Store owner dashboard
-- AI product compliance verification UI
-- Drone delivery tracking integration
-- Multi-language support (Arabic, English)
-
----
-
-## 🔐 Security Features
-
-- **JWT Authentication** - Secure token-based auth
-- **Keychain Storage** - Encrypted credential storage
-- **SSL/TLS** - Encrypted API communications
-- **AI Moderation** - Automatic content compliance checking
-- **Role-based access** - Customer vs Store vs Admin permissions
+### Planned Features
+- Complete add-to-cart functionality
+- Payment processing (Visa, Apple Pay, OneCash)
+- Advanced product search and recommendations
+- Store owner dashboard and analytics
+- Product compliance verification UI
+- Drone delivery integration and real-time tracking
+- Multi-language localization (Arabic, English)
 
 ---
 
-## 📡 Real-Time Updates Architecture
+## Security Implementation
 
-YShop implements an efficient **smart polling system** for real-time store updates without requiring WebSocket connections. This allows **1M+ concurrent users** without server overhead.
+- JWT-based authentication with secure token management
+- Keychain integration for encrypted credential storage
+- HTTPS/TLS encryption for all API communications
+- Role-based access control (Customer, Store Owner, Administrator)
+- Automated content moderation via AI systems
+- Input validation and SQL injection prevention
+
+---
+
+## Real-Time Update Architecture
+
+YShop implements an efficient smart polling system for store data updates without requiring WebSocket connections. This architecture supports over 1 million concurrent users with minimal server overhead.
+
+### Update Flow
 
 ```
-iOS App (every 30s)
+Client Poll Request (30-second interval)
     ↓
 GET /stores/updates-since/:timestamp?type=Food
     ↓
-Backend queries stores with updated_at > timestamp
+Server Query: WHERE updated_at > timestamp
     ↓
-Returns only: {id, name, status, updated_at}
+Response: {id, name, status, updated_at}
     ↓
-App applies updates to local store objects
+Client applies updates to local store objects
 ```
 
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow these guidelines:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/AmazingFeature`)
-3. **Commit** changes (`git commit -m 'Add AmazingFeature'`)
-4. **Push** to branch (`git push origin feature/AmazingFeature`)
-5. **Open** a Pull Request
-
-### Development Guidelines
-- Follow Swift style guide (Apple's recommendations)
-- Write comprehensive comments for complex logic
-- Test on both light and dark modes
-- Ensure proper error handling
+This lightweight approach eliminates the need for persistent connections while maintaining near real-time data consistency across the platform.
 
 ---
 
-## 📞 Support & Contact
+## Contributing
 
-- **Issues:** GitHub Issues
-- **Email:** support@yshop.io
-- **Documentation:** [YShop Docs](https://slender-forsythia-e75.notion.site/YShop-E-Commerce-APP-172883fb9e358081adb7d402501eac5f)
+Contributions are welcome through the standard GitHub workflow:
 
----
+1. Fork the repository
+2. Create a feature branch (git checkout -b feature/improvement)
+3. Commit changes (git commit -m 'Add improvement')
+4. Push to branch (git push origin feature/improvement)
+5. Open a Pull Request
 
-## 📄 License
-
-This project is proprietary software. All rights reserved © 2024-2026 YShop Inc.
-
----
-
-## 🎯 Vision
-
-YShop represents the future of e-commerce by combining three revolutionary technologies:
-1. **Native Mobile Apps** - Best-in-class user experience
-2. **Intelligent AI** - Automated compliance and personalization
-3. **Autonomous Delivery** - Drone-based same-day delivery
-
-Together, these create an ecosystem that is faster, smarter, and more accessible than traditional e-commerce platforms.
+Ensure code follows Swift style guidelines and includes appropriate error handling and testing.
 
 ---
 
-**Made with ❤️ by the YShop Team**
+## Support and Documentation
+
+Technical documentation: [YShop Project Documentation](https://slender-forsythia-e75.notion.site/YShop-E-Commerce-APP-172883fb9e358081adb7d402501eac5f)
+
+---
+
+## Project Vision
+
+YShop represents a comprehensive approach to modern e-commerce by integrating three core technologies:
+
+1. Native Mobile Development - Optimized user experience across iOS and Flutter
+2. Artificial Intelligence - Automated compliance, content verification, and personalization
+3. Autonomous Systems - Same-day delivery via intelligent drone networks
+
+This combination creates a platform that is faster, more intelligent, and more accessible than traditional e-commerce solutions.
+
+---
+
+Made by the YShop Development Team
