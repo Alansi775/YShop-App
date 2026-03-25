@@ -2,9 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>UIAppFonts</key>
-	<array>
-		<string>TenorSans-Regular.ttf</string>
-	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>YSHOP needs your location to set your delivery address</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>YSHOP needs your location for delivery tracking</string>
 </dict>
 </plist>

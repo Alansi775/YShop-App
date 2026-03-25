@@ -1,20 +1,29 @@
-//
-//  CartItem.swift
-//  YShop
-//
-//  Created by Mohammed on 27.12.2024.
-//
-
 import Foundation
 
-class CartItem {
-    var product: Product
-    var count: Int = 0
+struct CartItem: Codable, Identifiable {
+    let id: String
+    let userId: String
+    let productId: String
+    let storeId: String
+    let quantity: Int
+    let price: Double
+    let product: Product?
     
-    
-    init(product: Product, count: Int){
-        self.product = product
-        self.count = count
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case productId = "product_id"
+        case storeId = "store_id"
+        case quantity, price, product
     }
     
+    static let mock = CartItem(
+        id: "1",
+        userId: "user1",
+        productId: "prod1",
+        storeId: "store1",
+        quantity: 2,
+        price: 5.99,
+        product: .mock
+    )
 }
