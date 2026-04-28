@@ -27,8 +27,7 @@ struct Store: Codable, Identifiable {
         if iconUrl.starts(with: "http") {
             return iconUrl
         }
-        let baseHost = "http://10.155.83.72:3000"
-        return baseHost + iconUrl
+        return AppConstants.baseURL + iconUrl
     }
 
     static let mock = Store(

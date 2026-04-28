@@ -275,16 +275,18 @@ class APIClient {
     static let shared = APIClient()
 
     private let session: URLSession
-    private let baseURL: String
+    private var baseURL: String
+    private let baseURLCandidates: [String]
     private let requestTimeout: TimeInterval = 30
 
     private init(baseURL: String = "") {
-        self.baseURL = baseURL.isEmpty ? AppConstants.baseURL : baseURL
+        self.baseURLCandidates = AppConstants.baseURLCandidates
+        self.baseURL = baseURL.isEmpty ? (baseURLCandidates.first ?? AppConstants.baseURL) : baseURL
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = requestTimeout
         config.timeoutIntervalForResource = 60
-        config.waitsForConnectivity = true
+        config.waitsForConnectivity = false
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
 
         self.session = URLSession(configuration: config)
@@ -353,8 +355,16 @@ class APIClient {
             }
             throw error
         } catch {
+            if shouldAttemptFailover(error), let fallbackURL = nextBaseURL(current: baseURL) {
+                #if DEBUG
+                print("🔁 [API] Failover from \(baseURL) to \(fallbackURL)")
+                #endif
+                baseURL = fallbackURL
+                return try await request(endpoint, body: body, retryCount: retryCount + 1)
+            }
+
             if retryCount < 1 {
-                // Retry once on network errors
+                // Retry once on transient errors
                 try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
                 return try await request(endpoint, body: body, retryCount: retryCount + 1)
             }
@@ -424,6 +434,31 @@ class APIClient {
             throw APIError.invalidRequest
         }
         return url
+    }
+
+    private func nextBaseURL(current: String) -> String? {
+        guard let idx = baseURLCandidates.firstIndex(of: current) else {
+            return baseURLCandidates.first
+        }
+        let nextIdx = idx + 1
+        guard nextIdx < baseURLCandidates.count else { return nil }
+        return baseURLCandidates[nextIdx]
+    }
+
+    private func shouldAttemptFailover(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        guard nsError.domain == NSURLErrorDomain else { return false }
+        switch nsError.code {
+        case NSURLErrorTimedOut,
+             NSURLErrorCannotFindHost,
+             NSURLErrorCannotConnectToHost,
+             NSURLErrorNetworkConnectionLost,
+             NSURLErrorNotConnectedToInternet,
+             NSURLErrorDNSLookupFailed:
+            return true
+        default:
+            return false
+        }
     }
 
     private func validateResponse(_ response: URLResponse, data: Data? = nil) throws {

@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 // MARK: - Store Update Models
 struct StoreUpdate: Codable, Equatable {
@@ -23,7 +24,7 @@ class StoreUpdateService: ObservableObject {
     private var pollingTimer: Timer?
     private let updateInterval: TimeInterval = 30 // Check every 30 seconds
     private var lastCheckedTime: Date = Date()
-    private let baseURL = "http://10.155.83.72:3000/api/v1"
+    private let baseURL = AppConstants.baseURL
     
     // MARK: - Start/Stop Polling
     func startPolling(forType type: String) {

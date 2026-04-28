@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 class StoreService {
     static let shared = StoreService()
@@ -23,7 +24,7 @@ class StoreService {
 
     // MARK: - Get Public Stores by Type/Category
     static func getPublicStoresByType(_ type: String) async throws -> [Store] {
-        let baseURL = "http://10.155.83.72:3000/api/v1"
+        let baseURL = AppConstants.baseURL
         // Capitalize first letter to match database values (Food, Pharmacy, Clothes, Market)
         let capitalizedType = type.prefix(1).uppercased() + type.dropFirst()
         let typeEncoded = capitalizedType.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""

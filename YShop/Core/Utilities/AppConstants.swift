@@ -9,7 +9,49 @@ import Foundation
 
 struct AppConstants {
     // MARK: - API Configuration
-    static let baseURL = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "http://10.155.83.72:3000/api/v1"
+    private static let defaultAPIPrefix = "/api/v1"
+    private static let defaultDeviceHost = "http://192.168.1.69:3000"
+    private static let defaultBonjourHost = "http://mackbook.local:3000"
+
+    /// Change backend host in ONE place:
+    /// 1) `API_BASE_URL` env var (full url, highest priority), or
+    /// 2) `API_BASE_HOST` env var / Info.plist value (host only), or
+    /// 3) sensible defaults (simulator -> localhost, device -> LAN IP)
+    static let baseURL: String = {
+        return baseURLCandidates.first ?? "http://localhost:3000/api/v1"
+    }()
+
+    /// Ordered candidates; API client can failover between them.
+    static let baseURLCandidates: [String] = {
+        var urls: [String] = []
+
+        func normalized(_ raw: String) -> String {
+            raw.hasSuffix(defaultAPIPrefix) ? raw : "\(raw)\(defaultAPIPrefix)"
+        }
+
+        let envFullURL = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? ""
+        if !envFullURL.isEmpty { urls.append(normalized(envFullURL)) }
+
+        let envHost = ProcessInfo.processInfo.environment["API_BASE_HOST"] ?? ""
+        let plistHost = (Bundle.main.object(forInfoDictionaryKey: "API_BASE_HOST") as? String) ?? ""
+        let configHost = !envHost.isEmpty ? envHost : plistHost
+        if !configHost.isEmpty { urls.append(normalized(configHost)) }
+
+        #if targetEnvironment(simulator)
+        urls.append("http://localhost:3000/api/v1")
+        #else
+        urls.append(normalized(defaultDeviceHost))
+        urls.append(normalized(defaultBonjourHost))
+        #endif
+
+        // Keep order, remove duplicates
+        var unique: [String] = []
+        for url in urls where !unique.contains(url) {
+            unique.append(url)
+        }
+        return unique
+    }()
+
     static let apiVersion = "v1"
 
     // MARK: - App Info

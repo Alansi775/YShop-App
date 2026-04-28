@@ -141,7 +141,7 @@ class AuthManager: NSObject, ObservableObject {
 
     private let keychainHelper = KeychainHelper.shared
     private let session: URLSession
-    private let baseURL = "http://10.155.83.72:3000/api/v1"
+    private let baseURL = AppConstants.baseURL
     private let tokenKey = "authToken"
     private let roleKey = "userRole"
 
