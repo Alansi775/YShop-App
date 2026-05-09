@@ -3,103 +3,131 @@ import SwiftUI
 struct YShopTextField: View {
     let placeholder: String
     let icon: String
-    let isSecure: Bool
-    let keyboardType: UIKeyboardType
     @Binding var text: String
-    @State private var isSecureFieldVisible = false
-    @FocusState private var isFocused: Bool
-    @Environment(\.colorScheme) var colorScheme
+    var isSecure: Bool = false
+    var keyboardType: UIKeyboardType = .default
     
-    init(
-        placeholder: String,
-        icon: String,
-        text: Binding<String>,
-        isSecure: Bool = false,
-        keyboardType: UIKeyboardType = .default
-    ) {
-        self.placeholder = placeholder
-        self.icon = icon
-        self._text = text
-        self.isSecure = isSecure
-        self.keyboardType = keyboardType
+    @FocusState private var isFocused: Bool
+    @State private var isPasswordVisible: Bool = false
+    
+    // YSHOP Brand Blue - يشتغل في Light & Dark Mode
+    private var accentBlue: Color {
+        Color(red: 0.0, green: 0.48, blue: 1.0)
+    }
+    
+    private var isActive: Bool {
+        isFocused || !text.isEmpty
     }
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Icon with color animation
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(isFocused ? Color(.secondaryLabel) : Color(.tertiaryLabel))
-                .frame(width: 28)
-                .animation(.easeInOut(duration: 0.2), value: isFocused)
+        ZStack(alignment: .leading) {
+            // Background + Border
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(backgroundFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(borderColor, lineWidth: isFocused ? 1.5 : 0.5)
+                )
+                .shadow(
+                    color: isFocused ? accentBlue.opacity(0.12) : .clear,
+                    radius: isFocused ? 8 : 0,
+                    x: 0,
+                    y: 0
+                )
             
-            // Text Field
-            Group {
-                if isSecure && !isSecureFieldVisible {
-                    SecureField(placeholder, text: $text)
-                        .keyboardType(keyboardType)
-                        .focused($isFocused)
-                } else {
-                    TextField(placeholder, text: $text)
-                        .keyboardType(keyboardType)
-                        .focused($isFocused)
+            HStack(spacing: 12) {
+                // Icon
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundColor(iconColor)
+                    .frame(width: 20)
+                    .animation(.easeInOut(duration: 0.2), value: isFocused)
+                
+                // Floating Label + TextField
+                ZStack(alignment: .leading) {
+                    Text(placeholder)
+                        .font(.system(
+                            size: isActive ? 11 : 15,
+                            weight: isActive ? .semibold : .regular
+                        ))
+                        .foregroundColor(isActive ? accentBlue : Color(.secondaryLabel))
+                        .offset(y: isActive ? -14 : 0)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isActive)
+                    
+                    Group {
+                        if isSecure && !isPasswordVisible {
+                            SecureField("", text: $text)
+                        } else {
+                            TextField("", text: $text)
+                                .keyboardType(keyboardType)
+                                .textInputAutocapitalization(keyboardType == .emailAddress ? .never : .sentences)
+                                .autocorrectionDisabled(keyboardType == .emailAddress)
+                        }
+                    }
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundColor(Color(.label))
+                    .focused($isFocused)
+                    .offset(y: isActive ? 8 : 0)
+                    .opacity(isActive ? 1 : 0)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isActive)
+                }
+                
+                // Show/Hide Password
+                if isSecure && !text.isEmpty {
+                    Button(action: {
+                        HapticManager.shared.selection()
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isPasswordVisible.toggle()
+                        }
+                    }) {
+                        Image(systemName: isPasswordVisible ? "eye.slash.fill" : "eye.fill")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(Color(.tertiaryLabel))
+                            .frame(width: 24, height: 24)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .transition(.scale.combined(with: .opacity))
                 }
             }
-            .font(.system(size: 15, weight: .regular))
-            .textInputAutocapitalization(.none)
-            .disableAutocorrection(true)
-            
-            // Show/Hide Password Toggle
-            if isSecure {
-                Button {
-                    isSecureFieldVisible.toggle()
-                    HapticManager.shared.selection()
-                } label: {
-                    Image(systemName: isSecureFieldVisible ? "eye.slash.fill" : "eye.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(isFocused ? Color(.secondaryLabel) : Color(.tertiaryLabel))
-                }
-                .frame(width: 28)
-                .animation(.easeInOut(duration: 0.2), value: isFocused)
+            .padding(.horizontal, 16)
+        }
+        .frame(height: 56)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isFocused {
+                isFocused = true
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 15)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(
-                    isFocused ? Color(.secondaryLabel) : Color(.tertiaryLabel).opacity(0.1),
-                    lineWidth: 1.5
-                )
-        )
-        .frame(height: 54)
-        .animation(.easeInOut(duration: 0.2), value: isFocused)
+        .onChange(of: isFocused) { _, newValue in
+            if newValue {
+                HapticManager.shared.selection()
+            }
+        }
     }
-}
-
-#Preview {
-    @State var email = ""
-    @State var password = ""
     
-    VStack(spacing: 14) {
-        YShopTextField(
-            placeholder: "Email Address",
-            icon: "envelope.fill",
-            text: $email,
-            keyboardType: .emailAddress
-        )
-        
-        YShopTextField(
-            placeholder: "Password",
-            icon: "lock.fill",
-            text: $password,
-            isSecure: true
-        )
+    // MARK: - Adaptive Colors
+    
+    private var backgroundFillColor: Color {
+        if isFocused {
+            return Color(.systemBackground)
+        } else {
+            return Color(.secondarySystemBackground).opacity(0.6)
+        }
     }
-    .padding()
-    .background(Color(hex: "F5F7FA"))
+    
+    private var borderColor: Color {
+        if isFocused {
+            return accentBlue.opacity(0.5)
+        } else {
+            return Color(.separator).opacity(0.5)
+        }
+    }
+    
+    private var iconColor: Color {
+        if isFocused {
+            return accentBlue
+        } else {
+            return Color(.tertiaryLabel)
+        }
+    }
 }
