@@ -10,7 +10,7 @@ import Foundation
 struct AppConstants {
     // MARK: - API Configuration
     private static let defaultAPIPrefix = "/api/v1"
-    private static let defaultDeviceHost = "http://10.155.83.72:3000"
+    private static let defaultDeviceHost = "http://192.168.1.52:3000"
     private static let defaultBonjourHost = "http://mackbook.local:3000"
 
     /// Change backend host in ONE place:
