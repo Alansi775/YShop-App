@@ -22,13 +22,12 @@ class StoreUpdateService: ObservableObject {
     @Published var isPolling: Bool = false
     
     private var pollingTimer: Timer?
-    private let updateInterval: TimeInterval = 30 // Check every 30 seconds
+    private let updateInterval: TimeInterval = 60 // ⚡ Check every 60 seconds (was 10) - reduced polling frequency
     private var lastCheckedTime: Date = Date()
-    private let baseURL = AppConstants.baseURL
     
     // MARK: - Start/Stop Polling
     func startPolling(forType type: String) {
-        print("🔄 [POLLING] Starting smart polling for type: \(type)")
+        // Silent polling to reduce log noise
         isPolling = true
         lastCheckedTime = Date().addingTimeInterval(-60) // Start with 1 minute ago
         
@@ -46,7 +45,6 @@ class StoreUpdateService: ObservableObject {
     }
     
     func stopPolling() {
-        print("⏹ [POLLING] Stopping polling")
         pollingTimer?.invalidate()
         pollingTimer = nil
         isPolling = false
@@ -58,52 +56,47 @@ class StoreUpdateService: ObservableObject {
         let iso8601Formatter = ISO8601DateFormatter()
         iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let iso8601String = iso8601Formatter.string(from: lastCheckedTime)
+        // Silent update check
         
-        let urlString = "\(baseURL)/stores/updates-since/\(iso8601String)?type=\(type)"
+        var lastError: Error?
         
-        print("🔍 [POLLING] Checking for updates since: \(iso8601String)")
-        print("📍 [POLLING] URL: \(urlString)")
-        
-        guard let url = URL(string: urlString) else {
-            print("❌ [POLLING] Invalid URL")
-            return
-        }
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                print("❌ [POLLING] Invalid response")
-                return
-            }
-            
-            guard httpResponse.statusCode == 200 else {
-                print("❌ [POLLING] HTTP \(httpResponse.statusCode)")
-                return
-            }
-            
-            let decoder = JSONDecoder()
-            let updateResponse = try decoder.decode(UpdateResponse.self, from: data)
-            
-            if !updateResponse.data.isEmpty {
-                print("✅ [POLLING] Found \(updateResponse.data.count) updated stores!")
-                self.storeUpdates = updateResponse.data
+        // Try each candidate URL with fallover
+        for baseURL in AppConstants.baseURLCandidates {
+            do {
+                let urlString = "\(baseURL)/stores/updates-since/\(iso8601String)?type=\(type)"
                 
-                // Log each update
-                for update in updateResponse.data {
-                    print("   📱 Store: \(update.name) - Status: \(update.status)")
+                guard let url = URL(string: urlString) else {
+                    throw NSError(domain: "Invalid URL", code: -1)
                 }
-            } else {
-                print("✓ [POLLING] No updates")
+                
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 10
+                
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    return
+                }
+                
+                guard httpResponse.statusCode == 200 else {
+                    throw NSError(domain: "HTTP \(httpResponse.statusCode)", code: httpResponse.statusCode)
+                }
+                
+                let decoder = JSONDecoder()
+                let updateResponse = try decoder.decode(UpdateResponse.self, from: data)
+                
+                if !updateResponse.data.isEmpty {
+                    self.storeUpdates = updateResponse.data
+                }
+                
+                // Update timestamp for next check
+                lastCheckedTime = Date()
+                return // Success, exit retry loop
+            } catch {
+                lastError = error
+                continue
             }
-            
-            // Update timestamp for next check
-            if let newTime = ISO8601DateFormatter().date(from: updateResponse.timestamp) {
-                self.lastCheckedTime = newTime
-            }
-            
-        } catch {
-            print("❌ [POLLING] Error: \(error.localizedDescription)")
         }
     }
 }
+

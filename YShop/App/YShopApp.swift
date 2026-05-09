@@ -36,10 +36,10 @@ struct YShopApp: App {
                         } else if authManager.userRole == .driver {
                             DeliveryTabView()
                         } else {
-                            LoginView()
+                            YShopRootView()
                         }
                     } else {
-                        LoginView()
+                        YShopRootView()
                     }
                 }
                 

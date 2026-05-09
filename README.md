@@ -151,7 +151,7 @@ OpenCV Computer Vision Integration: https://www.youtube.com/watch?v=9puBDk01-_s
 ### iOS Development Setup
 
 ```bash
-git clone https://github.com/yourusername/YShop-App.git
+git clone https://github.com/Alansi775/YShop-App.git
 cd YShop-App
 
 # Open Xcode project

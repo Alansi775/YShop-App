@@ -25,9 +25,19 @@ struct Store: Codable, Identifiable {
     var fullIconUrl: String? {
         guard let iconUrl = iconUrl, !iconUrl.isEmpty else { return nil }
         if iconUrl.starts(with: "http") {
+            // Replace localhost with actual server IP if present
+            if iconUrl.contains("localhost:3000") {
+                let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+                let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
+                return iconUrl.replacingOccurrences(of: "http://localhost:3000", with: cleanBase)
+            }
             return iconUrl
         }
-        return AppConstants.baseURL + iconUrl
+        // Images are served from root, not /api/v1
+        let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+        // Remove /api/v1 suffix if present
+        let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
+        return cleanBase + iconUrl
     }
 
     static let mock = Store(

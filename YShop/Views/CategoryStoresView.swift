@@ -381,6 +381,10 @@ struct StoreDetailView: View {
     let store: Store
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) var colorScheme
+    
+    @State private var products: [Product] = []
+    @State private var isLoadingProducts = false
+    @State private var productsError: String?
 
     var body: some View {
         ZStack {
@@ -526,11 +530,148 @@ struct StoreDetailView: View {
                         .background(colorScheme == .dark ? Color(red: 0.1, green: 0.1, blue: 0.1) : Color.white)
                         .cornerRadius(12)
                         .padding(20)
+                        
+                        // Products Section
+                        if !products.isEmpty || isLoadingProducts {
+                            VStack(alignment: .leading, spacing: 16) {
+                                if isLoadingProducts {
+                                    VStack(spacing: 12) {
+                                        ProgressView()
+                                        Text("Loading menu...")
+                                            .font(.system(size: 13, weight: .regular))
+                                            .foregroundColor(.gray)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .padding(30)
+                                } else {
+                                    // Group products by category
+                                    let groupedProducts = Dictionary(grouping: products) { $0.category_name ?? "Other" }
+                                    let sortedCategories = groupedProducts.keys.sorted()
+                                    
+                                    ForEach(sortedCategories, id: \.self) { categoryName in
+                                        VStack(alignment: .leading, spacing: 12) {
+                                            Text(categoryName)
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundColor(colorScheme == .dark ? .white : .black)
+                                                .padding(.horizontal, 20)
+                                            
+                                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                                                ForEach(groupedProducts[categoryName] ?? []) { product in
+                                                    NavigationLink(destination: ProductDetailView(product: product, store: store)) {
+                                                        ProductCard(product: product)
+                                                    }
+                                                }
+                                            }
+                                            .padding(.horizontal, 20)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
         .navigationBarHidden(true)
+        .onAppear {
+            loadProducts()
+        }
+    }
+    
+    private func loadProducts() {
+        isLoadingProducts = true
+        productsError = nil
+        
+        Task {
+            do {
+                let fetchedProducts = try await StoreService.getStoreProducts(storeId: store.id)
+                DispatchQueue.main.async {
+                    products = fetchedProducts
+                    isLoadingProducts = false
+                    print("✅ Loaded \(fetchedProducts.count) products for store \(store.name)")
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    productsError = error.localizedDescription
+                    isLoadingProducts = false
+                    print("❌ Error loading products: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Product Card
+struct ProductCard: View {
+    let product: Product
+    @Environment(\.colorScheme) var colorScheme
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Product Image
+            if let fullImageUrl = product.fullImageUrl, let url = URL(string: fullImageUrl) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(height: 100)
+                            .clipped()
+                            .cornerRadius(8)
+                    case .empty:
+                        ZStack {
+                            Color.gray.opacity(0.1)
+                            ProgressView()
+                        }
+                        .frame(height: 100)
+                        .cornerRadius(8)
+                    default:
+                        Color.gray.opacity(0.05)
+                            .frame(height: 100)
+                            .cornerRadius(8)
+                    }
+                }
+            }
+            
+            // Product Name
+            Text(product.name)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(colorScheme == .dark ? .white : .black)
+                .lineLimit(2)
+            
+            // Product Price
+            Text(product.formattedPrice)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.orange)
+            
+            // Stock Badge
+            if let is_active = product.is_active, is_active > 0 && product.stock > 0 {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 4, height: 4)
+                    Text("In Stock")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.green)
+                    Spacer()
+                    Text("×\(product.stock)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.gray)
+                }
+            } else {
+                Text("Out of Stock")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.red)
+            }
+        }
+        .padding(10)
+        .background(colorScheme == .dark ? Color(red: 0.1, green: 0.1, blue: 0.1) : Color.white)
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+        )
     }
 }
 

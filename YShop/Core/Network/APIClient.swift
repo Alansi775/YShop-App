@@ -16,6 +16,25 @@ enum HTTPMethod: String {
     case delete = "DELETE"
 }
 
+// MARK: - Pagination Info
+struct PaginationInfo: Codable {
+    let page: Int
+    let limit: Int
+}
+
+// MARK: - API Response Wrapper
+struct APIResponse<T: Decodable>: Decodable {
+    let success: Bool
+    let data: T
+    let message: String?
+    let timestamp: String?
+    let pagination: PaginationInfo?
+    
+    enum CodingKeys: String, CodingKey {
+        case success, data, message, timestamp, pagination
+    }
+}
+
 // MARK: - API Error
 enum APIError: LocalizedError {
     case unauthorized
@@ -92,6 +111,7 @@ enum APIEndpoint {
     case publicStores
     case storeDetail(String)
     case storeCategories(String)
+    case storeProducts(Int)
 
     // MARK: - Cart
     case cart
@@ -174,6 +194,8 @@ enum APIEndpoint {
             return "/stores/\(id)"
         case .storeCategories(let storeId):
             return "/stores/\(storeId)/categories"
+        case .storeProducts(let storeId):
+            return "/products?storeId=\(storeId)"
 
         case .cart:
             return "/cart"
@@ -277,7 +299,7 @@ class APIClient {
     private let session: URLSession
     private var baseURL: String
     private let baseURLCandidates: [String]
-    private let requestTimeout: TimeInterval = 30
+    private let requestTimeout: TimeInterval = 10  // ⚡ Reduced from 30s
 
     private init(baseURL: String = "") {
         self.baseURLCandidates = AppConstants.baseURLCandidates
@@ -285,9 +307,10 @@ class APIClient {
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = requestTimeout
-        config.timeoutIntervalForResource = 60
+        config.timeoutIntervalForResource = 30  // ⚡ Reduced from 60s
         config.waitsForConnectivity = false
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        // ⚡ Enable aggressive caching (use cached data if available)
+        config.requestCachePolicy = .returnCacheDataElseLoad
 
         self.session = URLSession(configuration: config)
     }

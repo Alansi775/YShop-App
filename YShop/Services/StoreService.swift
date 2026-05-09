@@ -24,35 +24,50 @@ class StoreService {
 
     // MARK: - Get Public Stores by Type/Category
     static func getPublicStoresByType(_ type: String) async throws -> [Store] {
-        let baseURL = AppConstants.baseURL
         // Capitalize first letter to match database values (Food, Pharmacy, Clothes, Market)
         let capitalizedType = type.prefix(1).uppercased() + type.dropFirst()
         let typeEncoded = capitalizedType.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let urlString = "\(baseURL)/stores/public?type=\(typeEncoded)"
         
-        print("📍 [API] Requesting stores with URL: \(urlString)")
+        var lastError: Error?
         
-        guard let url = URL(string: urlString) else {
-            throw NSError(domain: "Invalid URL", code: -1)
+        // Try each candidate URL with fallover
+        for baseURL in AppConstants.baseURLCandidates {
+            do {
+                let urlString = "\(baseURL)/stores/public?type=\(typeEncoded)"
+                
+                print("📍 [API] Requesting stores with URL: \(urlString)")
+                
+                guard let url = URL(string: urlString) else {
+                    throw NSError(domain: "Invalid URL", code: -1)
+                }
+                
+                var request = URLRequest(url: url)
+                request.httpMethod = "GET"
+                request.timeoutInterval = 10
+                
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                    throw NSError(domain: "HTTP Error", code: -1)
+                }
+                
+                struct StoresResponse: Decodable {
+                    let data: [Store]
+                }
+                
+                let decoder = JSONDecoder()
+                let storesResponse = try decoder.decode(StoresResponse.self, from: data)
+                print("✅ [API] Response returned \(storesResponse.data.count) stores")
+                return storesResponse.data
+            } catch {
+                lastError = error
+                print("🔁 [API] Failed with \(baseURL), trying next...")
+                continue
+            }
         }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw NSError(domain: "HTTP Error", code: -1)
-        }
-        
-        struct StoresResponse: Decodable {
-            let data: [Store]
-        }
-        
-        let decoder = JSONDecoder()
-        let storesResponse = try decoder.decode(StoresResponse.self, from: data)
-        print("✅ [API] Response returned \(storesResponse.data.count) stores")
-        return storesResponse.data
+        // If all failed, throw the last error
+        throw lastError ?? NSError(domain: "All endpoints failed", code: -1)
     }
 
     // MARK: - Get Store Detail
@@ -63,5 +78,11 @@ class StoreService {
     // MARK: - Get Store Categories
     static func getStoreCategories(storeId: String) async throws -> [Category] {
         try await APIClient.shared.request(.storeCategories(storeId))
+    }
+    
+    // MARK: - Get Store Products
+    static func getStoreProducts(storeId: Int) async throws -> [Product] {
+        let response: APIResponse<[Product]> = try await APIClient.shared.request(.storeProducts(storeId))
+        return response.data
     }
 }
