@@ -5,10 +5,12 @@ struct StoreDetailView: View {
     let store: Store
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) var colorScheme
+    @EnvironmentObject var cartManager: CartManager
     
     @State private var products: [Product] = []
     @State private var isLoadingProducts = true
     @State private var productsError: String?
+    @State private var showCartSheet = false
     
     // Animation States
     @State private var headerVisible = false
@@ -49,8 +51,22 @@ struct StoreDetailView: View {
             }
             .coordinateSpace(name: "scroll")
             .onPreferenceChange(ViewOffsetKey.self) { scrollOffset = $0 }
+
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 6) {
+                    CartBadgeButton(itemCount: cartManager.itemCount, action: { showCartSheet = true }, iconColor: colorScheme == .dark ? .white : .black)
+                    if cartManager.itemCount > 0 {
+                        CartCountBadge(count: cartManager.itemCount)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showCartSheet) {
+            CartView(showsCloseButton: true)
+        }
         .onAppear {
             // انيميشن دخول العناصر
             withAnimation(.spring(response: 0.8, dampingFraction: 0.7).delay(0.2)) {

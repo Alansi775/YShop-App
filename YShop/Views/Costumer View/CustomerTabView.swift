@@ -102,4 +102,5 @@ struct TabBarItem: View {
 #Preview {
     CustomerTabView()
         .environmentObject(AuthManager())
+    .environmentObject(CartManager.shared)
 }

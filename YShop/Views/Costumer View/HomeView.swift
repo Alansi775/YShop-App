@@ -12,13 +12,13 @@ struct HeroProduct: Identifiable {
 
 struct HomeView: View {
     @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var cartManager: CartManager
     @State private var currentHeroIndex = 0
     @State private var searchText = ""
     @State private var heroTimer: Timer?
     @State private var isAIExpanded = false
     @State private var showProfileSheet = false
     @State private var showCartSheet = false
-    @State private var cartItemCount = 0
     @State private var scrollOffset: CGFloat = 0
     @State private var selectedCategory: String = ""
     @State private var navigateToCategoryStores = false
@@ -251,59 +251,21 @@ struct HomeView: View {
                         .padding(.vertical, 8)
                     }
                     
-                    // Floating Header (Top Right) - Profile & Cart Only
-                    VStack(spacing: 0) {
-                        HStack(spacing: 16) {
-                            Spacer()
-                            
-                            // Profile Button
-                            Button(action: { showProfileSheet = true }) {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.white.opacity(0.1))
-                                        .frame(width: 40, height: 40)
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                        )
-                                    
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 18))
-                                        .foregroundColor(.white)
-                                }
-                            }
-                            
-                            // Cart Button
-                            Button(action: { showCartSheet = true }) {
-                                ZStack(alignment: .topTrailing) {
-                                    Image(systemName: "bag.fill")
-                                        .font(.system(size: 22))
-                                        .foregroundColor(.white)
-                                    
-                                    // Only show badge if items exist
-                                    if cartItemCount > 0 {
-                                        Text("\(cartItemCount)")
-                                            .font(.system(size: 10, weight: .bold))
-                                            .foregroundColor(.white)
-                                            .frame(width: 18, height: 18)
-                                            .background(Color(red: 0.2, green: 0.6, blue: 0.9))
-                                            .cornerRadius(9)
-                                            .offset(x: 2, y: -2)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .frame(height: 56)
-                        
-                        Spacer()
-                    }
-                    .zIndex(100)
                 }
             }
             .frame(maxHeight: .infinity)
         }
-        .navigationBarHidden(true)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                NativeCircleIconButton(systemName: "person.fill", action: { showProfileSheet = true })
+                HStack(spacing: 6) {
+                    CartBadgeButton(itemCount: cartManager.itemCount, action: { showCartSheet = true }, iconColor: .white)
+                    if cartManager.itemCount > 0 {
+                        CartCountBadge(count: cartManager.itemCount)
+                    }
+                }
+            }
+        }
         .gesture(
             DragGesture()
                 .onChanged { value in
@@ -333,7 +295,7 @@ struct HomeView: View {
             ProfileSheetView(isPresented: $showProfileSheet)
         }
         .sheet(isPresented: $showCartSheet) {
-            CartSheetView(isPresented: $showCartSheet)
+            CartView(showsCloseButton: true)
         }
         .onAppear {
             startAutoRotate()
@@ -487,64 +449,7 @@ struct CartSheetView: View {
     @Binding var isPresented: Bool
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Sheet Handle
-            RoundedRectangle(cornerRadius: 2.5)
-                .fill(Color.gray.opacity(0.5))
-                .frame(width: 40, height: 5)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-            
-            // Cart Header
-            HStack {
-                Text("SHOPPING CART")
-                    .font(.system(size: 18, weight: .semibold))
-                    .tracking(1.5)
-                
-                Spacer()
-                
-                Button(action: { isPresented = false }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.black)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
-            
-            Divider()
-            
-            // Empty Cart State
-            VStack(spacing: 16) {
-                Image(systemName: "bag")
-                    .font(.system(size: 48))
-                    .foregroundColor(.gray.opacity(0.5))
-                
-                Text("Your Cart is Empty")
-                    .font(.system(size: 18, weight: .semibold))
-                
-                Text("Add items to your cart to get started")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.gray)
-                
-                Button(action: { isPresented = false }) {
-                    Text("CONTINUE SHOPPING")
-                        .font(.system(size: 14, weight: .semibold))
-                        .tracking(1.2)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(Color.black)
-                        .cornerRadius(10)
-                }
-                .padding(.top, 16)
-            }
-            .frame(maxHeight: .infinity)
-            .frame(maxWidth: .infinity)
-            
-            Spacer()
-        }
-        .padding(20)
+        CartView(showsCloseButton: true)
         .presentationDetents([.medium, .large])
     }
 }
@@ -552,4 +457,5 @@ struct CartSheetView: View {
 #Preview {
     HomeView()
         .environmentObject(AuthManager())
+    .environmentObject(CartManager.shared)
 }

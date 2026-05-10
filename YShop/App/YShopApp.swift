@@ -11,6 +11,7 @@ import SwiftUI
 struct YShopApp: App {
     // Use the singleton instance to match what LoginViewModel updates
     @StateObject private var authManager = AuthManager.shared
+    @StateObject private var cartManager = CartManager.shared
     @StateObject private var networkMonitor = NetworkMonitor.shared
     @StateObject private var locationManager = LocationManager()
 
@@ -47,6 +48,7 @@ struct YShopApp: App {
                 }
             }
             .environmentObject(authManager)
+            .environmentObject(cartManager)
         }
     }
 }

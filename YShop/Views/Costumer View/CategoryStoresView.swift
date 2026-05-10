@@ -6,6 +6,8 @@ struct CategoryStoresView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @StateObject private var updateService = StoreUpdateService()
+    @EnvironmentObject var cartManager: CartManager
+    @State private var showCartSheet = false
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
@@ -107,9 +109,23 @@ struct CategoryStoresView: View {
                     }
                 }
             }
+
         }
         .navigationTitle(categoryName)
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 6) {
+                    CartBadgeButton(itemCount: cartManager.itemCount, action: { showCartSheet = true }, iconColor: colorScheme == .dark ? .white : .black)
+                    if cartManager.itemCount > 0 {
+                        CartCountBadge(count: cartManager.itemCount)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showCartSheet) {
+            CartView(showsCloseButton: true)
+        }
         .onAppear {
             loadStores()
             updateService.startPolling(forType: categoryName)

@@ -13,25 +13,35 @@ class CartService {
 
     // MARK: - Get Cart
     static func getCart() async throws -> [CartItem] {
-        try await APIClient.shared.request(.cart)
+        do {
+            let response: APIResponse<[CartItem]> = try await APIClient.shared.request(.cart)
+            return response.data
+        } catch {
+            return try await APIClient.shared.request(.cart)
+        }
     }
 
     // MARK: - Add to Cart
-    static func addToCart(productId: String, storeId: String, quantity: Int) async throws -> CartItem {
+    static func addToCart(productId: String, quantity: Int) async throws -> CartItem {
         struct AddRequest: Encodable {
             let productId: String
-            let storeId: String?
             let quantity: Int
 
             enum CodingKeys: String, CodingKey {
+                case productId
                 case quantity
-                case productId = "product_id"
-                case storeId = "store_id"
             }
         }
 
-        let request = AddRequest(productId: productId, storeId: storeId, quantity: quantity)
-        return try await APIClient.shared.request(.addToCart, body: request)
+        let request = AddRequest(productId: productId, quantity: quantity)
+        let _: EmptyResponse = try await APIClient.shared.request(.addToCart, body: request)
+
+        let cartItems = try await getCart()
+        if let matchedItem = cartItems.first(where: { $0.productId == productId }) {
+            return matchedItem
+        }
+
+        throw APIError.unknown("Item added but could not be found in cart")
     }
 
     // MARK: - Update Cart Item
@@ -41,7 +51,14 @@ class CartService {
         }
 
         let request = UpdateRequest(quantity: quantity)
-        return try await APIClient.shared.request(.updateCartItem(itemId), body: request)
+        let _: EmptyResponse = try await APIClient.shared.request(.updateCartItem(itemId), body: request)
+
+        let cartItems = try await getCart()
+        if let matchedItem = cartItems.first(where: { $0.id == itemId }) {
+            return matchedItem
+        }
+
+        throw APIError.unknown("Item updated but could not be found in cart")
     }
 
     // MARK: - Remove Cart Item

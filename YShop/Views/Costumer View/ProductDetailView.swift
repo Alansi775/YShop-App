@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Product Detail View
 struct ProductDetailView: View {
     @Environment(\.colorScheme) var colorScheme
+    @EnvironmentObject var cartManager: CartManager
     
     let product: Product
     let store: Store
@@ -285,13 +286,20 @@ struct ProductDetailView: View {
             
             // Add to Cart Button
             Button(action: {
-                showAddedToCart = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { showAddedToCart = false }
+                Task {
+                    do {
+                        try await cartManager.addToCart(product: product, quantity: quantity)
+                        showAddedToCart = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showAddedToCart = false }
+                    } catch {
+                        print("❌ [CART] Failed to add item: \(error.localizedDescription)")
+                    }
+                }
             }) {
                 HStack(spacing: 8) {
                     Image(systemName: "bag.fill")
                         .font(.system(size: 16, weight: .semibold))
-                    Text("Add to Cart")
+                    Text(showAddedToCart ? "Added" : "Add to Cart")
                         .font(.system(size: 16, weight: .bold))
                 }
                 .foregroundColor(.white)

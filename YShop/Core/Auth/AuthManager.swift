@@ -290,6 +290,9 @@ class AuthManager: NSObject, ObservableObject {
                         self.currentUser = user
                         self.isLoggedIn = true
                         print("✅ [AUTH] User data fetched successfully: \(user.email)")
+                        Task {
+                            await CartManager.shared.refreshCart()
+                        }
                     } else {
                         print("❌ [AUTH] User data not found in response")
                         // Do not immediately clear token; allow server verification to retry later
@@ -329,6 +332,9 @@ class AuthManager: NSObject, ObservableObject {
                 UserDefaults.standard.set(UserRole.customer.rawValue, forKey: self.roleKey)
                 self.currentUser = response.user
                 self.isLoading = false
+                Task {
+                    await CartManager.shared.refreshCart()
+                }
             }
         } catch {
             DispatchQueue.main.async { self.errorMessage = error.localizedDescription; self.isLoading = false }
@@ -347,6 +353,7 @@ class AuthManager: NSObject, ObservableObject {
         UserDefaults.standard.removeObject(forKey: roleKey)
         UserDefaults.standard.removeObject(forKey: tokenKey)
         UserDefaults.standard.synchronize()
+        CartManager.shared.clearLocalState()
         
         print("🚪 [LOGOUT] User logged out successfully")
     }

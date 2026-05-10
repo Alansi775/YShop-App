@@ -200,11 +200,11 @@ enum APIEndpoint {
         case .cart:
             return "/cart"
         case .addToCart:
-            return "/cart/items"
+            return "/cart/add"
         case .updateCartItem(let itemId):
-            return "/cart/items/\(itemId)"
+            return "/cart/item/\(itemId)"
         case .removeCartItem(let itemId):
-            return "/cart/items/\(itemId)"
+            return "/cart/item/\(itemId)"
         case .clearCart:
             return "/cart"
         case .checkout:
