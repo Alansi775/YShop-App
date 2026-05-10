@@ -187,7 +187,16 @@ struct HomeView: View {
                                         let index = (currentHeroIndex + offset + heroProducts.count) % heroProducts.count
                                         let isCenter = offset == 0
                                         
-                                        VStack(spacing: 4) {
+                                        Button(action: {
+                                            if isCenter {
+                                                selectedCategory = heroProducts[index].category
+                                                navigateToCategoryStores = true
+                                            } else {
+                                                withAnimation(.easeInOut(duration: 0.4)) {
+                                                    changeProduct(index)
+                                                }
+                                            }
+                                        }) {
                                             Text(heroProducts[index].name)
                                                 .font(.system(size: isCenter ? 13 : 10, weight: .semibold))
                                                 .tracking(isCenter ? 0.8 : 0.5)
@@ -196,32 +205,14 @@ struct HomeView: View {
                                                 .lineLimit(isCenter ? 2 : 1)
                                                 .truncationMode(.tail)
                                                 .multilineTextAlignment(.center)
+                                                .frame(height: isCenter ? 65 : 45)
+                                                .frame(maxWidth: .infinity)
+                                                .background(.bar)
+                                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                                .scaleEffect(isCenter ? 1.0 : 0.9)
+                                                .compositingGroup()
                                         }
-                                        .frame(height: isCenter ? 65 : 45)
-                                        .frame(maxWidth: .infinity)
-                                        .background(
-                                            isCenter ?
-                                            Color.white.opacity(0.12) : Color.white.opacity(0.06)
-                                        )
-                                        .cornerRadius(10)
-                                        .overlay(
-                                            isCenter ?
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(Color.white.opacity(0.4), lineWidth: 1.5) : nil
-                                        )
-                                        .scaleEffect(isCenter ? 1.0 : 0.9)
-                                        .onTapGesture {
-                                            if isCenter {
-                                                // Tap center to navigate to store
-                                                selectedCategory = heroProducts[index].category
-                                                navigateToCategoryStores = true
-                                            } else {
-                                                // Tap sides to change product
-                                                withAnimation(.easeInOut(duration: 0.4)) {
-                                                    changeProduct(index)
-                                                }
-                                            }
-                                        }
+                                        .buttonStyle(.borderless)
                                     }
                                 }
                                 .padding(.horizontal, 16)
