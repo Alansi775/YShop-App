@@ -25,23 +25,8 @@ struct YShopApp: App {
                 Color(.systemBackground)
                     .ignoresSafeArea()
                 
-                // Main Content
-                Group {
-                    // Only show TabViews if logged in AND have a valid role
-                    if authManager.isLoggedIn && authManager.userRole != nil {
-                        if authManager.userRole == .customer {
-                            NavigationView {
-                                HomeView()
-                            }
-                        } else if authManager.userRole == .driver {
-                            DeliveryTabView()
-                        } else {
-                            YShopRootView()
-                        }
-                    } else {
-                        YShopRootView()
-                    }
-                }
+                // Main Content: always show the root coordinator (handles splash -> routing)
+                YShopRootView()
                 
                 // Offline Banner
                 if !networkMonitor.isConnected {
@@ -62,10 +47,6 @@ struct YShopApp: App {
                 }
             }
             .environmentObject(authManager)
-            .onAppear {
-                // Check auth status when app starts
-                authManager.checkAuthStatus()
-            }
         }
     }
 }

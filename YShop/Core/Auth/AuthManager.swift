@@ -177,10 +177,22 @@ class AuthManager: NSObject, ObservableObject {
                 print("📡 [AUTH] Verifying token with server...")
                 fetchCurrentUser()
             } else {
-                print("⚠️  [AUTH] No role in UserDefaults - clearing stale token")
-                isLoggedIn = false
-                userRole = nil
-                currentUser = nil
+                print("⚠️  [AUTH] No role in UserDefaults - attempting to recover from token")
+                // Try to decode role from token payload first (safe, no signature verification)
+                if let decodedRole = decodeRoleFromJWT(token) {
+                    if let role = UserRole(rawValue: decodedRole) {
+                        userRole = role
+                        UserDefaults.standard.set(decodedRole, forKey: roleKey)
+                        print("✅ [AUTH] Role decoded from token: \(decodedRole)")
+                        print("📡 [AUTH] Verifying token with server...")
+                        fetchCurrentUser()
+                        return
+                    }
+                }
+
+                // Fallback: verify token with server (do not clear token immediately)
+                print("📡 [AUTH] Role not available locally — verifying token with server...")
+                fetchCurrentUser()
             }
         } else {
             print("🚪 [AUTH] No token found - user not logged in")
@@ -188,6 +200,36 @@ class AuthManager: NSObject, ObservableObject {
             userRole = nil
             currentUser = nil
         }
+    }
+
+    // Attempt to decode the JWT payload and extract a role/userType field.
+    // This does NOT verify the token signature; it's only used to recover cached role info.
+    private func decodeRoleFromJWT(_ token: String) -> String? {
+        let parts = token.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        let payloadPart = String(parts[1])
+
+        // Pad base64 string
+        var base64 = payloadPart
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = base64.count % 4
+        if remainder > 0 {
+            base64 += String(repeating: "=", count: 4 - remainder)
+        }
+
+        guard let data = Data(base64Encoded: base64) else { return nil }
+        do {
+            if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                // Common claim keys: "role", "userType"
+                if let role = json["role"] as? String { return role }
+                if let userType = json["userType"] as? String { return userType }
+                if let r = json["user_type"] as? String { return r }
+            }
+        } catch {
+            print("⚠️ [AUTH] Failed to decode JWT payload: \(error)")
+        }
+        return nil
     }
 
     private func fetchCurrentUser() {
@@ -205,7 +247,7 @@ class AuthManager: NSObject, ObservableObject {
         Task {
             do {
                 let (data, response) = try await session.data(for: urlRequest)
-                
+
                 // Check for HTTP errors
                 if let httpResponse = response as? HTTPURLResponse {
                     if httpResponse.statusCode == 401 {
@@ -218,15 +260,39 @@ class AuthManager: NSObject, ObservableObject {
                         return
                     }
                 }
-                
-                let responseData = try JSONDecoder().decode(UserResponse.self, from: data)
+
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+
+                // Try multiple possible response shapes from backend
+                var resolvedUser: SimpleUser? = nil
+
+                // 1) APIResponse wrapper with `data` containing user
+                if let apiResp = try? decoder.decode(APIResponse<SimpleUser>.self, from: data) {
+                    resolvedUser = apiResp.data
+                    print("✅ [AUTH] Decoded user from APIResponse<data>")
+                }
+
+                // 2) Direct user object
+                if resolvedUser == nil, let directUser = try? decoder.decode(SimpleUser.self, from: data) {
+                    resolvedUser = directUser
+                    print("✅ [AUTH] Decoded user from direct SimpleUser response")
+                }
+
+                // 3) { user: { ... } } shape
+                if resolvedUser == nil, let userResp = try? decoder.decode(UserResponse.self, from: data), let u = userResp.user {
+                    resolvedUser = u
+                    print("✅ [AUTH] Decoded user from UserResponse.user")
+                }
+
                 DispatchQueue.main.async {
-                    if let user = responseData.user {
+                    if let user = resolvedUser {
                         self.currentUser = user
                         self.isLoggedIn = true
                         print("✅ [AUTH] User data fetched successfully: \(user.email)")
                     } else {
                         print("❌ [AUTH] User data not found in response")
+                        // Do not immediately clear token; allow server verification to retry later
                         self.isLoggedIn = false
                         self.currentUser = nil
                     }

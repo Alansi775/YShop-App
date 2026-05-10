@@ -14,9 +14,11 @@ import SwiftUI
 struct YShopRootView: View {
     
     @State private var stage: Stage = .splash
-    
+    @EnvironmentObject private var authManager: AuthManager
+
     enum Stage {
         case splash
+        case deciding
         case login
     }
     
@@ -25,12 +27,39 @@ struct YShopRootView: View {
             switch stage {
             case .splash:
                 YShopSplashView {
+                    // After splash finishes, move to deciding stage where we wait
+                    // for AuthManager to confirm login state, then route accordingly.
                     withAnimation(.easeInOut(duration: 0.5)) {
-                        stage = .login
+                        stage = .deciding
                     }
+                    // Trigger a fresh auth verification (harmless if already running)
+                    Task { await MainActor.run { authManager.checkAuthStatus() } }
                 }
                 .transition(.opacity)
-                
+
+            case .deciding:
+                // Show a lightweight loading view while AuthManager resolves state
+                Group {
+                    if authManager.isLoggedIn, let role = authManager.userRole {
+                        // Navigate to appropriate main area
+                        if role == .customer {
+                            // Show HomeView inside a NavigationView initially (no bottom tab bar)
+                            NavigationView {
+                                HomeView()
+                            }
+                        } else {
+                            DeliveryTabView()
+                        }
+                    } else if !authManager.isLoggedIn {
+                        // Not logged in -> show LoginView
+                        LoginView()
+                            .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                    } else {
+                        // Fallback loading indicator
+                        VStack { ProgressView().scaleEffect(1.2) }
+                    }
+                }
+
             case .login:
                 LoginView()
                     .transition(.opacity.combined(with: .scale(scale: 1.02)))
