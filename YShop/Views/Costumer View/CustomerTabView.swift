@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CustomerTabView: View {
     @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var cartManager: CartManager
     @State private var selectedTab = 0
     
     var body: some View {
@@ -73,6 +74,20 @@ struct CustomerTabView: View {
                 .background(Color(.systemBackground))
                 .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: -2)
             }
+
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    TrackingOrderFloatingButton()
+                        .padding(.trailing, 18)
+                        .padding(.bottom, 76)
+                }
+            }
+        }
+        .onChange(of: cartManager.pendingTrackingOrderId) { pendingOrderId in
+            guard pendingOrderId != nil else { return }
+            selectedTab = 0
         }
     }
 }

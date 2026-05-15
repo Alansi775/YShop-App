@@ -72,7 +72,12 @@ class StoreService {
 
     // MARK: - Get Store Detail
     static func getStoreDetail(id: String) async throws -> Store {
-        try await APIClient.shared.request(.storeDetail(id))
+        do {
+            let response: APIResponse<Store> = try await APIClient.shared.request(.storeDetail(id))
+            return response.data
+        } catch {
+            return try await APIClient.shared.request(.storeDetail(id))
+        }
     }
 
     // MARK: - Get Store Categories

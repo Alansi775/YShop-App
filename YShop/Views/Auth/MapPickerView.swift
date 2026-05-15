@@ -5,6 +5,7 @@ import CoreLocation
 class LocationManagerDelegate: NSObject, CLLocationManagerDelegate {
     var didUpdateLocation: (CLLocationCoordinate2D) -> Void = { _ in }
     var didFailWithError: (String) -> Void = { _ in }
+    var didChangeAuthorization: ((CLAuthorizationStatus) -> Void)?
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         if let location = locations.last {
@@ -18,10 +19,21 @@ class LocationManagerDelegate: NSObject, CLLocationManagerDelegate {
         print("❌ [MAP] Location error: \(error.localizedDescription)")
         didFailWithError(error.localizedDescription)
     }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        didChangeAuthorization?(manager.authorizationStatus)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        didChangeAuthorization?(status)
+    }
 }
 
 struct MapPickerView: View {
     @Binding var isPresented: Bool
+    let initialLatitude: Double?
+    let initialLongitude: Double?
+    let initialAddress: String
     @State private var position: MapCameraPosition = .automatic
     @State private var selectedCoordinate: CLLocationCoordinate2D?
     @State private var originalCoordinate: CLLocationCoordinate2D?
@@ -35,6 +47,20 @@ struct MapPickerView: View {
     @State private var lastGeocodeTime: Date = Date()
     @State private var isLocationInitialized = false
     let onConfirm: (Double, Double, String) -> Void
+
+    init(
+        isPresented: Binding<Bool>,
+        initialLatitude: Double? = nil,
+        initialLongitude: Double? = nil,
+        initialAddress: String = "",
+        onConfirm: @escaping (Double, Double, String) -> Void
+    ) {
+        self._isPresented = isPresented
+        self.initialLatitude = initialLatitude
+        self.initialLongitude = initialLongitude
+        self.initialAddress = initialAddress
+        self.onConfirm = onConfirm
+    }
     
     var body: some View {
         ZStack {
@@ -232,6 +258,24 @@ struct MapPickerView: View {
         .onAppear {
             print("🗺️ [MAP] MapPickerView appeared - requesting user location")
             setupLocationManager()
+            if let latitude = initialLatitude,
+               let longitude = initialLongitude,
+               latitude != 0,
+               longitude != 0 {
+                let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                selectedCoordinate = coordinate
+                originalCoordinate = coordinate
+                position = .region(
+                    MKCoordinateRegion(
+                        center: coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                    )
+                )
+                selectedAddress = initialAddress
+                if !initialAddress.isEmpty {
+                    isLocationInitialized = true
+                }
+            }
         }
         .onDisappear {
             cleanup()
@@ -270,6 +314,22 @@ struct MapPickerView: View {
         delegate.didFailWithError = { error in
             DispatchQueue.main.async {
                 print("❌ [MAP] Location request failed: \(error)")
+            }
+        }
+
+        delegate.didChangeAuthorization = { status in
+            DispatchQueue.main.async {
+                print("📍 [MAP] Authorization changed: \(status.rawValue)")
+                switch status {
+                case .authorizedAlways, .authorizedWhenInUse:
+                    if !self.isLocationInitialized {
+                        self.locationManager.startUpdatingLocation()
+                    }
+                case .denied, .restricted:
+                    self.showPermissionAlert = true
+                default:
+                    break
+                }
             }
         }
         

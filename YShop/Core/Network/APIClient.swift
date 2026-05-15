@@ -125,6 +125,7 @@ enum APIEndpoint {
     case createOrder
     case getUserOrders
     case getOrderDetail(String)
+    case sendOrderReceipt(String)
     case updateOrderStatus(String)
     case cancelOrder(String)
 
@@ -216,6 +217,8 @@ enum APIEndpoint {
             return "/orders"
         case .getOrderDetail(let id):
             return "/orders/\(id)"
+        case .sendOrderReceipt(let id):
+            return "/orders/\(id)/receipt"
         case .updateOrderStatus(let id):
             return "/orders/\(id)/status"
         case .cancelOrder(let id):
@@ -274,13 +277,14 @@ enum APIEndpoint {
         switch self {
         case .login, .signup, .deliverySignup, .deliveryLogin, .verifyEmail, .createProduct,
              .addToCart, .checkout, .createOrder, .acceptOffer, .pickupOrder, .deliverOrder,
+               .sendOrderReceipt,
              .sendAIMessage, .createReturnRequest, .uploadReturnEvidence:
             return .post
 
         case .updateProduct, .updateOrderStatus, .updateCartItem, .updateDriverLocation:
             return .put
 
-        case .deleteProduct, .removeCartItem, .cancelOrder, .skipOffer:
+        case .deleteProduct, .removeCartItem, .cancelOrder, .skipOffer, .clearCart:
             return .delete
 
         case .changePassword, .toggleWorking, .reclaimOrder:

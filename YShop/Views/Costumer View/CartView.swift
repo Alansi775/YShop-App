@@ -6,6 +6,7 @@ struct CartView: View {
     @Environment(\.dismiss) private var dismiss
 
     let showsCloseButton: Bool
+    @State private var showCheckout = false
 
     init(showsCloseButton: Bool = false) {
         self.showsCloseButton = showsCloseButton
@@ -14,13 +15,8 @@ struct CartView: View {
     private var subtotal: Double {
         cartManager.totalPrice
     }
-
-    private var tax: Double {
-        subtotal * 0.1
-    }
-
     private var total: Double {
-        subtotal + tax
+        subtotal
     }
 
     var body: some View {
@@ -54,6 +50,14 @@ struct CartView: View {
         }
         .task {
             await cartManager.refreshCart()
+        }
+        .fullScreenCover(isPresented: $showCheckout) {
+            NavigationStack {
+                CheckoutView(onOrderPlaced: { _ in
+                    showCheckout = false
+                    dismiss()
+                })
+            }
         }
     }
 
@@ -119,18 +123,7 @@ struct CartView: View {
                     .foregroundColor(Color(.label))
             }
 
-            HStack {
-                Text("Tax (10%)")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundColor(Color(.secondaryLabel))
-
-                Spacer()
-
-                Text(String(format: "%.2f", tax))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(.label))
-            }
-
+            // Tax removed as requested
             Divider()
 
             HStack {
@@ -145,7 +138,11 @@ struct CartView: View {
                     .foregroundColor(Color(.label))
             }
 
-            Button(action: {}) {
+            Button(action: {
+                if !cartManager.cartItems.isEmpty {
+                    showCheckout = true
+                }
+            }) {
                 Text("Proceed to Checkout")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white)

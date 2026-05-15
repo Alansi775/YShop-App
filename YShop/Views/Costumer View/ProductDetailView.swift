@@ -9,6 +9,7 @@ struct ProductDetailView: View {
     let store: Store
     
     @State private var showFullScreenImage: Bool = false
+    @State private var selectedImageIndex: Int = 0
     @State private var quantity: Int = 1
     @State private var isLiked: Bool = false
     @State private var showAddedToCart: Bool = false
@@ -47,7 +48,7 @@ struct ProductDetailView: View {
         .navigationTitle(product.name)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showFullScreenImage) {
-            FullScreenImageView(imageUrl: product.fullImageUrl ?? "")
+            FullScreenImageView(imageUrls: resolvedImageUrls, initialIndex: selectedImageIndex)
         }
     }
     
@@ -108,7 +109,32 @@ struct ProductDetailView: View {
     
     private var productImageView: some View {
         Group {
-            if let fullImageUrl = product.fullImageUrl, let url = URL(string: fullImageUrl) {
+            if resolvedImageUrls.count > 1 {
+                TabView(selection: $selectedImageIndex) {
+                    ForEach(resolvedImageUrls.indices, id: \.self) { index in
+                        productImageCell(urlString: resolvedImageUrls[index], index: index)
+                            .tag(index)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
+            } else {
+                if let imageUrl = resolvedImageUrls.first {
+                    productImageCell(urlString: imageUrl, index: 0)
+                } else {
+                    fallbackImageView
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 300)
+        .background(Color(.secondarySystemBackground).opacity(0.5))
+        .cornerRadius(16)
+        .padding(.horizontal, 16)
+    }
+
+    private func productImageCell(urlString: String, index: Int) -> some View {
+        Group {
+            if let url = URL(string: urlString) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
@@ -120,22 +146,21 @@ struct ProductDetailView: View {
                         image
                             .resizable()
                             .scaledToFit()
-                            .onTapGesture { showFullScreenImage = true }
                     case .failure:
                         fallbackImageView
                     @unknown default:
-                        EmptyView()
+                        fallbackImageView
                     }
                 }
             } else {
                 fallbackImageView
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 280)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .cornerRadius(16)
-        .padding(.horizontal, 16)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedImageIndex = index
+            showFullScreenImage = true
+        }
     }
     
     private var fallbackImageView: some View {
@@ -241,6 +266,29 @@ struct ProductDetailView: View {
         )
         .padding(.horizontal, 16)
     }
+
+    private var resolvedImageUrls: [String] {
+        let urls = product.imageGalleryUrls.compactMap { resolvedURLString(from: $0) }
+        return urls.isEmpty ? (product.primaryImageUrl.flatMap { resolvedURLString(from: $0) }.map { [$0] } ?? []) : urls
+    }
+
+    private func resolvedURLString(from value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if trimmed.starts(with: "http") {
+            if trimmed.contains("localhost:3000") {
+                let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+                let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
+                return trimmed.replacingOccurrences(of: "http://localhost:3000", with: cleanBase)
+            }
+            return trimmed
+        }
+
+        let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+        let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
+        return cleanBase + trimmed
+    }
     
     private var bottomAddToCartBar: some View {
         VStack(spacing: 16) {
@@ -325,7 +373,9 @@ struct FullScreenImageView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
     
-    let imageUrl: String
+    let imageUrls: [String]
+    let initialIndex: Int
+    @State private var selectedIndex: Int = 0
     
     var body: some View {
         ZStack {
@@ -346,22 +396,37 @@ struct FullScreenImageView: View {
                 .padding(16)
                 
                 Spacer()
-                
-                if let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFit()
-                        case .empty:
-                            ProgressView().tint(colorScheme == .dark ? .white : .black)
-                        case .failure:
-                            Image(systemName: "photo").foregroundColor(.gray)
-                        @unknown default:
-                            EmptyView()
+
+                if imageUrls.isEmpty {
+                    Image(systemName: "photo")
+                        .font(.system(size: 42))
+                        .foregroundColor(.gray)
+                } else {
+                    TabView(selection: $selectedIndex) {
+                        ForEach(imageUrls.indices, id: \.self) { index in
+                            if let url = URL(string: imageUrls[index]) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image.resizable().scaledToFit().padding(.horizontal, 12)
+                                    case .empty:
+                                        ProgressView().tint(colorScheme == .dark ? .white : .black)
+                                    case .failure:
+                                        Image(systemName: "photo").foregroundColor(.gray)
+                                    @unknown default:
+                                        EmptyView()
+                                    }
+                                }
+                                .tag(index)
+                            }
                         }
                     }
+                    .tabViewStyle(.page(indexDisplayMode: imageUrls.count > 1 ? .automatic : .never))
+                    .onAppear {
+                        selectedIndex = min(max(initialIndex, 0), max(imageUrls.count - 1, 0))
+                    }
                 }
-                
+
                 Spacer()
             }
         }

@@ -60,6 +60,12 @@ struct SimpleUser: Codable {
     let role: String
     let isActive: Bool
     let isVerified: Bool
+    let address: String?
+    let latitude: Double?
+    let longitude: Double?
+    let buildingInfo: String?
+    let apartmentNumber: String?
+    let deliveryInstructions: String?
     let createdAt: String?
     let updatedAt: String?
     
@@ -69,6 +75,12 @@ struct SimpleUser: Codable {
         case role = "userType"
         case isActive = "is_active"
         case isVerified = "is_verified"
+        case address
+        case latitude
+        case longitude
+        case buildingInfo = "building_info"
+        case apartmentNumber = "apartment_number"
+        case deliveryInstructions = "delivery_instructions"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -90,6 +102,12 @@ struct SimpleUser: Codable {
         role = (try? container.decode(String.self, forKey: .role)) ?? "customer"
         isActive = (try? container.decode(Bool.self, forKey: .isActive)) ?? true
         isVerified = (try? container.decode(Bool.self, forKey: .isVerified)) ?? false
+        address = try? container.decodeIfPresent(String.self, forKey: .address)
+        latitude = try? container.decodeIfPresent(Double.self, forKey: .latitude)
+        longitude = try? container.decodeIfPresent(Double.self, forKey: .longitude)
+        buildingInfo = try? container.decodeIfPresent(String.self, forKey: .buildingInfo)
+        apartmentNumber = try? container.decodeIfPresent(String.self, forKey: .apartmentNumber)
+        deliveryInstructions = try? container.decodeIfPresent(String.self, forKey: .deliveryInstructions)
         createdAt = try? container.decode(String.self, forKey: .createdAt)
         updatedAt = try? container.decode(String.self, forKey: .updatedAt)
     }
@@ -290,8 +308,12 @@ class AuthManager: NSObject, ObservableObject {
                         self.currentUser = user
                         self.isLoggedIn = true
                         print("✅ [AUTH] User data fetched successfully: \(user.email)")
+                        if let token = self.token {
+                            SocketService.shared.connectIfNeeded(token: token)
+                        }
                         Task {
                             await CartManager.shared.refreshCart()
+                            await CartManager.shared.refreshActiveTrackingOrder()
                         }
                     } else {
                         print("❌ [AUTH] User data not found in response")
@@ -332,8 +354,10 @@ class AuthManager: NSObject, ObservableObject {
                 UserDefaults.standard.set(UserRole.customer.rawValue, forKey: self.roleKey)
                 self.currentUser = response.user
                 self.isLoading = false
+                SocketService.shared.connectIfNeeded(token: response.token)
                 Task {
                     await CartManager.shared.refreshCart()
+                    await CartManager.shared.refreshActiveTrackingOrder()
                 }
             }
         } catch {
@@ -348,6 +372,7 @@ class AuthManager: NSObject, ObservableObject {
         userRole = nil
         currentUser = nil
         token = nil  // This deletes from Keychain
+        SocketService.shared.disconnect()
         
         // Clear UserDefaults
         UserDefaults.standard.removeObject(forKey: roleKey)

@@ -45,12 +45,22 @@ class OrderService {
 
     // MARK: - Get User Orders
     static func getUserOrders(page: Int = 1) async throws -> [Order] {
-        try await APIClient.shared.request(.getUserOrders)
+        do {
+            let response: APIResponse<[Order]> = try await APIClient.shared.request(.getUserOrders)
+            return response.data
+        } catch {
+            return try await APIClient.shared.request(.getUserOrders)
+        }
     }
 
     // MARK: - Get Order Detail
     static func getOrderDetail(id: String) async throws -> Order {
-        try await APIClient.shared.request(.getOrderDetail(id))
+        do {
+            let response: APIResponse<Order> = try await APIClient.shared.request(.getOrderDetail(id))
+            return response.data
+        } catch {
+            return try await APIClient.shared.request(.getOrderDetail(id))
+        }
     }
 
     // MARK: - Update Order Status

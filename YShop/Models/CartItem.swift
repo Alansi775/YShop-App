@@ -29,6 +29,10 @@ struct CartItem: Codable, Identifiable {
         case status
     }
 
+    enum AltCodingKeys: String, CodingKey {
+        case imageUrl
+    }
+
     init(
         id: String,
         userId: String,
@@ -59,6 +63,7 @@ struct CartItem: Codable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let altContainer = try decoder.container(keyedBy: AltCodingKeys.self)
 
         if let intId = try? container.decode(Int.self, forKey: .id) {
             id = String(intId)
@@ -98,7 +103,8 @@ struct CartItem: Codable, Identifiable {
 
         product = try? container.decodeIfPresent(Product.self, forKey: .product)
         name = try? container.decodeIfPresent(String.self, forKey: .name)
-        imageUrl = try? container.decodeIfPresent(String.self, forKey: .imageUrl)
+        imageUrl = (try? container.decodeIfPresent(String.self, forKey: .imageUrl))
+            ?? (try? altContainer.decodeIfPresent(String.self, forKey: .imageUrl))
         currency = try? container.decodeIfPresent(String.self, forKey: .currency)
         stock = try? container.decodeIfPresent(Int.self, forKey: .stock)
         status = try? container.decodeIfPresent(String.self, forKey: .status)
@@ -131,21 +137,21 @@ struct CartItem: Codable, Identifiable {
     }
 
     var fullImageUrl: String? {
-        if let imageUrl, !imageUrl.isEmpty {
+    // First try direct imageUrl
+        if let imageUrl = imageUrl, !imageUrl.isEmpty {
+            let baseURL = "http://10.155.83.72:3000"
+            
             if imageUrl.starts(with: "http") {
-                if imageUrl.contains("localhost:3000") {
-                    let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.54:3000"
-                    let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
-                    return imageUrl.replacingOccurrences(of: "http://localhost:3000", with: cleanBase)
-                }
+                print("✅ [CARTITEM] Full URL: \(imageUrl)")
                 return imageUrl
             }
-
-            let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.54:3000"
-            let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
-            return cleanBase + imageUrl
+            
+            let fullURL = imageUrl.starts(with: "/") ? baseURL + imageUrl : baseURL + "/" + imageUrl
+            print("✅ [CARTITEM] Built URL: \(fullURL)")
+            return fullURL
         }
-
+        
+        // Fallback to product's fullImageUrl
         return product?.fullImageUrl
     }
     

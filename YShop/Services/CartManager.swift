@@ -5,11 +5,18 @@ import SwiftUI
 final class CartManager: ObservableObject {
     static let shared = CartManager()
 
+    private let lastOrderIdKey = "lastOrderId"
+
     @Published private(set) var cartItems: [CartItem] = []
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var lastOrderId: String?
+    @Published private(set) var pendingTrackingOrderId: String?
+    @Published private(set) var activeTrackingOrder: Order?
 
-    private init() {}
+    private init() {
+        lastOrderId = UserDefaults.standard.string(forKey: lastOrderIdKey)
+    }
 
     var itemCount: Int {
         cartItems.count
@@ -84,9 +91,82 @@ final class CartManager: ObservableObject {
         }
     }
 
+    func clearCart() async {
+        do {
+            try await CartService.clearCart()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        cartItems = []
+    }
+
+    func setLastOrderId(_ orderId: String?) {
+        lastOrderId = orderId
+
+        if let orderId {
+            UserDefaults.standard.set(orderId, forKey: lastOrderIdKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: lastOrderIdKey)
+        }
+    }
+
+    func setActiveTrackingOrder(_ order: Order?) {
+        activeTrackingOrder = order?.status.isTrackable == true ? order : nil
+    }
+
+    func refreshActiveTrackingOrder() async {
+        do {
+            if let orderId = lastOrderId, !orderId.isEmpty {
+                let order = try await OrderService.getOrderDetail(id: orderId)
+                if order.status.isTrackable {
+                    setActiveTrackingOrder(order)
+                    return
+                }
+
+                setActiveTrackingOrder(nil)
+                setLastOrderId(nil)
+                return
+            }
+
+            let orders = try await OrderService.getUserOrders()
+            if let latestOrder = orders
+                .filter({ $0.status.isTrackable })
+                .max(by: Self.orderPriorityComparator) {
+                setActiveTrackingOrder(latestOrder)
+                setLastOrderId(latestOrder.id)
+            } else {
+                setActiveTrackingOrder(nil)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private static func orderPriorityComparator(_ lhs: Order, _ rhs: Order) -> Bool {
+        let lhsId = Int(lhs.id) ?? 0
+        let rhsId = Int(rhs.id) ?? 0
+        if lhsId != rhsId {
+            return lhsId < rhsId
+        }
+
+        return (lhs.updatedAt ?? lhs.createdAt ?? "") < (rhs.updatedAt ?? rhs.createdAt ?? "")
+    }
+
+    func presentTrackingOrder(id: String) {
+        pendingTrackingOrderId = id
+    }
+
+    func clearPendingTrackingOrder() {
+        pendingTrackingOrderId = nil
+    }
+
     func clearLocalState() {
         cartItems = []
         isLoading = false
         errorMessage = nil
+        setLastOrderId(nil)
+        clearPendingTrackingOrder()
+        setActiveTrackingOrder(nil)
     }
 }

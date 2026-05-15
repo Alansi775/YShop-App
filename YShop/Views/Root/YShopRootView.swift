@@ -15,13 +15,14 @@ struct YShopRootView: View {
     
     @State private var stage: Stage = .splash
     @EnvironmentObject private var authManager: AuthManager
+    @EnvironmentObject private var cartManager: CartManager
 
     enum Stage {
         case splash
         case deciding
         case login
     }
-    
+
     var body: some View {
         ZStack {
             switch stage {
@@ -43,9 +44,15 @@ struct YShopRootView: View {
                     if authManager.isLoggedIn, let role = authManager.userRole {
                         // Navigate to appropriate main area
                         if role == .customer {
-                            // Show HomeView inside a NavigationView initially (no bottom tab bar)
-                            NavigationView {
-                                HomeView()
+                            ZStack(alignment: .bottomTrailing) {
+                                // Show HomeView inside a NavigationView initially (no bottom tab bar)
+                                NavigationView {
+                                    HomeView()
+                                }
+
+                                TrackingOrderFloatingButton()
+                                    .padding(.trailing, 18)
+                                    .padding(.bottom, 22)
                             }
                         } else {
                             DeliveryTabView()

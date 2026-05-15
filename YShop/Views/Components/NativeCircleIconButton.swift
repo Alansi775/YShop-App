@@ -7,6 +7,7 @@ struct NativeCircleIconButton: View {
     var size: CGFloat = 40
     var iconSize: CGFloat = 18
     var showBackground: Bool = false
+    var backgroundColor: Color? = nil
 
     var body: some View {
         Button(action: action) {
@@ -15,7 +16,7 @@ struct NativeCircleIconButton: View {
                     .font(.system(size: iconSize, weight: .semibold))
                     .foregroundColor(iconColor)
                     .frame(width: size, height: size)
-                    .background(.ultraThinMaterial)
+                    .background(backgroundColor != nil ? AnyShapeStyle(backgroundColor!) : AnyShapeStyle(.ultraThinMaterial))
                     .clipShape(Circle())
                     .overlay(
                         Circle().stroke(Color.white.opacity(0.18), lineWidth: 1)
