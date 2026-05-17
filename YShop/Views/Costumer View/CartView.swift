@@ -15,148 +15,176 @@ struct CartView: View {
     private var subtotal: Double {
         cartManager.totalPrice
     }
+    
     private var total: Double {
         subtotal
     }
 
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color(red: 0.04, green: 0.04, blue: 0.05) : Color(.systemGroupedBackground)
+    }
+
     var body: some View {
-        ZStack {
-            (colorScheme == .dark ? Color.black : Color.white).ignoresSafeArea()
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                // خلفية نظيفة فاخرة
+                backgroundColor.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header
+                VStack(spacing: 0) {
+                    if cartManager.isLoading {
+                        Spacer()
+                        ProgressView().scaleEffect(1.2)
+                        Spacer()
+                    } else if cartManager.cartItems.isEmpty {
+                        emptyState
+                    } else {
+                        ScrollView(showsIndicators: false) {
+                            VStack(spacing: 16) {
+                                // إظهار عدد العناصر بأسلوب هادئ ونظيف يتماشى مع الـ Inline Title
+                                HStack {
+                                    Text("\(cartManager.itemCount) items added")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(Color(.secondaryLabel))
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 4)
+                                .padding(.top, 10)
 
-                Divider()
-
-                if cartManager.isLoading {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                } else if cartManager.cartItems.isEmpty {
-                    emptyState
-                } else {
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 12) {
-                            ForEach(cartManager.cartItems) { item in
-                                CartItemRow(item: item)
+                                ForEach(cartManager.cartItems) { item in
+                                    CartItemRow(item: item)
+                                        .transition(.scale.combined(with: .opacity))
+                                }
                             }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 6)
+                            .padding(.bottom, 150) // مساحة مريحة للفوتر العائم
                         }
-                        .padding(16)
                     }
+                }
 
-                    summaryFooter
+                // الفوتر العائم الزجاجي يظهر فقط عند وجود عناصر
+                if !cartManager.cartItems.isEmpty && !cartManager.isLoading {
+                    floatingSummaryFooter
+                        .transition(.move(edge: .bottom))
+                }
+            }
+            // إعدادات الـ Navigation Bar والـ Toolbar المحدثة منك (لم يتم لمس زر x)
+            .navigationTitle("Shopping Cart")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                if showsCloseButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        NativeCircleIconButton(
+                            systemName: "xmark",
+                            action: { dismiss() },
+                            iconColor: .primary,
+                            size: 35.5,
+                            iconSize: 15,
+                            showBackground: false
+                        )
+                    }
+                }
+            }
+            .animation(.easeInOut, value: cartManager.cartItems.isEmpty)
+            .task {
+                await cartManager.refreshCart()
+            }
+            .fullScreenCover(isPresented: $showCheckout) {
+                NavigationStack {
+                    CheckoutView(onOrderPlaced: { _ in
+                        showCheckout = false
+                        dismiss()
+                    })
                 }
             }
         }
-        .task {
-            await cartManager.refreshCart()
-        }
-        .fullScreenCover(isPresented: $showCheckout) {
-            NavigationStack {
-                CheckoutView(onOrderPlaced: { _ in
-                    showCheckout = false
-                    dismiss()
-                })
-            }
-        }
     }
-
-    private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Shopping Cart")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(Color(.label))
-
-                Text("\(cartManager.itemCount) items")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundColor(Color(.secondaryLabel))
-            }
-
-            Spacer()
-
-            if showsCloseButton {
-                NativeCircleIconButton(
-                    systemName: "xmark",
-                    action: { dismiss() },
-                    iconColor: colorScheme == .dark ? .white : .black,
-                    size: 35.5,
-                    iconSize: 15,
-                    showBackground: true
-                )
-            }
-        }
-        .padding(16)
-    }
-
+    
+    // MARK: - Empty State (مع تأثير نبض خفيف)
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "bag")
-                .font(.system(size: 48, weight: .light))
-                .foregroundColor(Color(.secondaryLabel))
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.1))
+                    .frame(width: 120, height: 120)
+                
+                Image(systemName: "cart")
+                    .font(.system(size: 50, weight: .light))
+                    .foregroundColor(.blue)
+            }
+            .padding(.bottom, 10)
 
             Text("Your Cart is Empty")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 20, weight: .bold))
                 .foregroundColor(Color(.label))
 
-            Text("Add items to continue shopping")
-                .font(.system(size: 13, weight: .regular))
+            Text("Looks like you haven't added\nanything to your cart yet.")
+                .font(.system(size: 15, weight: .regular))
                 .foregroundColor(Color(.secondaryLabel))
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 24)
+        .offset(y: -40)
     }
 
-    private var summaryFooter: some View {
-        VStack(spacing: 12) {
-            Divider()
-
-            HStack {
-                Text("Subtotal")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundColor(Color(.secondaryLabel))
-
-                Spacer()
-
-                Text(String(format: "%.2f", subtotal))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(.label))
-            }
-
-            // Tax removed as requested
-            Divider()
-
-            HStack {
-                Text("Total")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Color(.label))
-
-                Spacer()
-
-                Text(String(format: "%.2f", total))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(Color(.label))
-            }
-
-            Button(action: {
-                if !cartManager.cartItems.isEmpty {
-                    showCheckout = true
+    // MARK: - Floating Footer
+    private var floatingSummaryFooter: some View {
+        VStack(spacing: 16) {
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Total Payment")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Color(.secondaryLabel))
+                    
+                    Text("\(cartManager.cartItems.first?.product?.currency ?? "$") \(String(format: "%.2f", total))")
+                        .font(.system(size: 24, weight: .black))
+                        .foregroundColor(Color(.label))
                 }
-            }) {
-                Text("Proceed to Checkout")
-                    .font(.system(size: 14, weight: .bold))
+                
+                Spacer()
+                
+                Button(action: {
+                    if !cartManager.cartItems.isEmpty {
+                        showCheckout = true
+                    }
+                }) {
+                    HStack(spacing: 8) {
+                        Text("Checkout")
+                            .font(.system(size: 16, weight: .bold))
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 14, weight: .bold))
+                    }
                     .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(Color.black)
-                    .cornerRadius(12)
+                    .padding(.horizontal, 24)
+                    .frame(height: 54)
+                    .background(
+                        LinearGradient(
+                            colors: [.blue, Color(red: 0.1, green: 0.4, blue: 0.9)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(Capsule())
+                    .shadow(color: .blue.opacity(0.3), radius: 10, x: 0, y: 5)
+                }
             }
         }
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 34) // الـ Safe Area للآيفون
+        .background(
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .bottom)
+                .shadow(color: Color.black.opacity(0.08), radius: 15, x: 0, y: -5)
+        )
     }
 }
 
+// MARK: - Cart Item Row
 struct CartItemRow: View {
     @EnvironmentObject var cartManager: CartManager
     let item: CartItem
@@ -165,23 +193,15 @@ struct CartItemRow: View {
         item.fullImageUrl ?? item.product?.fullImageUrl
     }
 
-    private var displayName: String {
-        item.displayName
-    }
-
-    private var displayPrice: String {
-        item.formattedPrice
-    }
-
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 16) {
+            // صورة المنتج
             Group {
                 if let imageUrl, let url = URL(string: imageUrl) {
                     AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
+                        if let image = phase.image {
                             image.resizable().scaledToFill()
-                        default:
+                        } else {
                             placeholder
                         }
                     }
@@ -189,76 +209,80 @@ struct CartItemRow: View {
                     placeholder
                 }
             }
-            .frame(width: 70, height: 70)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .frame(width: 85, height: 85)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(displayName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(.label))
-                    .lineLimit(2)
-
-                Text(displayPrice)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.blue)
-            }
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                Button(action: {
-                    Task {
-                        try? await cartManager.updateQuantity(
-                            cartItemId: item.id,
-                            quantity: max(1, item.quantity - 1)
-                        )
+            // التفاصيل
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top) {
+                    Text(item.displayName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Color(.label))
+                        .lineLimit(2)
+                    
+                    Spacer()
+                    
+                    // زر الحذف
+                    Button(action: {
+                        Task { try? await cartManager.removeItem(item.id) }
+                    }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14))
+                            .foregroundColor(.red.opacity(0.8))
+                            .padding(8)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(Circle())
                     }
-                }) {
-                    Image(systemName: "minus")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(Color(.secondaryLabel))
-                        .frame(width: 24, height: 24)
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(6)
                 }
 
-                Text("\(item.quantity)")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(Color(.label))
-
-                Button(action: {
-                    Task {
-                        try? await cartManager.updateQuantity(
-                            cartItemId: item.id,
-                            quantity: item.quantity + 1
-                        )
+                HStack(alignment: .bottom) {
+                    Text(item.formattedPrice)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundColor(.blue)
+                    
+                    Spacer()
+                    
+                    // أزرار التحكم بالكمية (Pill Shape)
+                    HStack(spacing: 12) {
+                        Button(action: {
+                            Task { try? await cartManager.updateQuantity(cartItemId: item.id, quantity: max(1, item.quantity - 1)) }
+                        }) {
+                            Image(systemName: "minus")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(item.quantity > 1 ? Color(.label) : Color(.tertiaryLabel))
+                                .frame(width: 28, height: 28)
+                        }
+                        
+                        Text("\(item.quantity)")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(Color(.label))
+                            .frame(minWidth: 16)
+                        
+                        Button(action: {
+                            Task { try? await cartManager.updateQuantity(cartItemId: item.id, quantity: item.quantity + 1) }
+                        }) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 28, height: 28)
+                                .background(Color.blue)
+                                .clipShape(Circle())
+                        }
                     }
-                }) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 24, height: 24)
-                        .background(Color.black)
-                        .cornerRadius(6)
-                }
-
-                Button(action: {
-                    Task {
-                        try? await cartManager.removeItem(item.id)
-                    }
-                }) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.red)
-                        .frame(width: 24, height: 24)
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(6)
+                    .padding(4)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(Capsule())
                 }
             }
         }
         .padding(12)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .background(Color(.systemBackground))
+        .cornerRadius(20)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(Color(.separator).opacity(0.1), lineWidth: 1)
+        )
     }
 
     private var placeholder: some View {

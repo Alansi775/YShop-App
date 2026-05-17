@@ -77,7 +77,7 @@ struct Store: Codable, Identifiable {
             return nil 
         }
         
-        let baseURL = "http://10.155.83.72:3000"
+        let baseURL = "http://192.168.1.51:3000"
         
         if iconUrl.starts(with: "http") {
             print("✅ [STORE] Full URL: \(iconUrl)")

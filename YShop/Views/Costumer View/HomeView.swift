@@ -129,7 +129,7 @@ struct HomeView: View {
                                     
                                     if !searchText.isEmpty {
                                         Button(action: { searchText = "" }) {
-                                            Image(systemName: "xmark.circle.fill")
+                                            Image(systemName: "xmark")
                                                 .foregroundColor(.white.opacity(0.6))
                                         }
                                     }

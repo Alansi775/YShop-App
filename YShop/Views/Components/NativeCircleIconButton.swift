@@ -16,11 +16,8 @@ struct NativeCircleIconButton: View {
                     .font(.system(size: iconSize, weight: .semibold))
                     .foregroundColor(iconColor)
                     .frame(width: size, height: size)
-                    .background(backgroundColor != nil ? AnyShapeStyle(backgroundColor!) : AnyShapeStyle(.ultraThinMaterial))
+                    .background(backgroundColor != nil ? AnyShapeStyle(backgroundColor!) : AnyShapeStyle(.bar))
                     .clipShape(Circle())
-                    .overlay(
-                        Circle().stroke(Color.white.opacity(0.18), lineWidth: 1)
-                    )
             } else {
                 Image(systemName: systemName)
                     .font(.system(size: iconSize, weight: .semibold))

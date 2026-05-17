@@ -54,6 +54,7 @@ struct ChangePasswordRequest: Encodable {
 struct SimpleUser: Codable {
     let id: String
     let name: String
+    let surname: String?
     let email: String
     let phone: String?
     let avatar: String?
@@ -72,7 +73,10 @@ struct SimpleUser: Codable {
     enum CodingKeys: String, CodingKey {
         case id, email, phone, avatar
         case name = "display_name"
+        case namePlain = "name"
+        case surname
         case role = "userType"
+        case rolePlain = "role"
         case isActive = "is_active"
         case isVerified = "is_verified"
         case address
@@ -95,11 +99,16 @@ struct SimpleUser: Codable {
             id = (try? container.decode(String.self, forKey: .id)) ?? ""
         }
         
-        name = (try? container.decode(String.self, forKey: .name)) ?? ""
+        let preferredName = (try? container.decode(String.self, forKey: .name))
+            ?? (try? container.decode(String.self, forKey: .namePlain))
+            ?? ""
+        let preferredSurname = try? container.decodeIfPresent(String.self, forKey: .surname)
+        name = preferredSurname?.isEmpty == false ? "\(preferredName) \(preferredSurname!)" : preferredName
+        surname = preferredSurname
         email = try container.decode(String.self, forKey: .email)
         phone = try? container.decode(String.self, forKey: .phone)
         avatar = try? container.decode(String.self, forKey: .avatar)
-        role = (try? container.decode(String.self, forKey: .role)) ?? "customer"
+        role = (try? container.decode(String.self, forKey: .role)) ?? (try? container.decode(String.self, forKey: .rolePlain)) ?? "customer"
         isActive = (try? container.decode(Bool.self, forKey: .isActive)) ?? true
         isVerified = (try? container.decode(Bool.self, forKey: .isVerified)) ?? false
         address = try? container.decodeIfPresent(String.self, forKey: .address)
@@ -110,6 +119,28 @@ struct SimpleUser: Codable {
         deliveryInstructions = try? container.decodeIfPresent(String.self, forKey: .deliveryInstructions)
         createdAt = try? container.decode(String.self, forKey: .createdAt)
         updatedAt = try? container.decode(String.self, forKey: .updatedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(surname, forKey: .surname)
+        try container.encode(email, forKey: .email)
+        try container.encodeIfPresent(phone, forKey: .phone)
+        try container.encodeIfPresent(avatar, forKey: .avatar)
+        try container.encode(role, forKey: .role)
+        try container.encode(isActive, forKey: .isActive)
+        try container.encode(isVerified, forKey: .isVerified)
+        try container.encodeIfPresent(address, forKey: .address)
+        try container.encodeIfPresent(latitude, forKey: .latitude)
+        try container.encodeIfPresent(longitude, forKey: .longitude)
+        try container.encodeIfPresent(buildingInfo, forKey: .buildingInfo)
+        try container.encodeIfPresent(apartmentNumber, forKey: .apartmentNumber)
+        try container.encodeIfPresent(deliveryInstructions, forKey: .deliveryInstructions)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
     }
 }
 

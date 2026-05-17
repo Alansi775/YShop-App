@@ -138,7 +138,7 @@ struct MapPickerView: View {
                         cleanup()
                         isPresented = false
                     }) {
-                        Image(systemName: "xmark.circle.fill")
+                        Image(systemName: "xmark")
                             .font(.system(size: 32, weight: .semibold))
                             .foregroundColor(.blue)
                     }

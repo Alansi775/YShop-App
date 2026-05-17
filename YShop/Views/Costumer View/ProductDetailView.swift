@@ -4,6 +4,7 @@ import SwiftUI
 struct ProductDetailView: View {
     @Environment(\.colorScheme) var colorScheme
     @EnvironmentObject var cartManager: CartManager
+    @Environment(\.dismiss) private var dismiss
     
     let product: Product
     let store: Store
@@ -13,6 +14,7 @@ struct ProductDetailView: View {
     @State private var quantity: Int = 1
     @State private var isLiked: Bool = false
     @State private var showAddedToCart: Bool = false
+    @State private var showCartSheet: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -47,8 +49,28 @@ struct ProductDetailView: View {
         .background(Color(.systemBackground).ignoresSafeArea())
         .navigationTitle(product.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                HStack(spacing: 6) {
+                    CartBadgeButton(
+                        itemCount: cartManager.itemCount,
+                        action: { showCartSheet = true },
+                        iconColor: colorScheme == .dark ? .white : .black
+                    )
+
+                    if cartManager.itemCount > 0 {
+                        CartCountBadge(count: cartManager.itemCount)
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showFullScreenImage) {
-            FullScreenImageView(imageUrls: resolvedImageUrls, initialIndex: selectedImageIndex)
+            NavigationStack {
+                FullScreenImageView(imageUrls: resolvedImageUrls, initialIndex: selectedImageIndex)
+            }
+        }
+        .sheet(isPresented: $showCartSheet) {
+            CartView(showsCloseButton: true)
         }
     }
     
@@ -278,14 +300,14 @@ struct ProductDetailView: View {
 
         if trimmed.starts(with: "http") {
             if trimmed.contains("localhost:3000") {
-                let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+                let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.51:3000"
                 let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
                 return trimmed.replacingOccurrences(of: "http://localhost:3000", with: cleanBase)
             }
             return trimmed
         }
 
-        let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+        let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.51:3000"
         let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
         return cleanBase + trimmed
     }
@@ -337,24 +359,32 @@ struct ProductDetailView: View {
                 Task {
                     do {
                         try await cartManager.addToCart(product: product, quantity: quantity)
-                        showAddedToCart = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showAddedToCart = false }
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                            showAddedToCart = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                showAddedToCart = false
+                            }
+                        }
                     } catch {
                         print("❌ [CART] Failed to add item: \(error.localizedDescription)")
                     }
                 }
             }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "bag.fill")
+                    Image(systemName: showAddedToCart ? "checkmark.circle.fill" : "bag.fill")
                         .font(.system(size: 16, weight: .semibold))
-                    Text(showAddedToCart ? "Added" : "Add to Cart")
+                    Text(showAddedToCart ? "Added to Cart" : "Add to Cart")
                         .font(.system(size: 16, weight: .bold))
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
-                .background(Color.blue)
+                .background(showAddedToCart ? Color.green : Color.blue)
                 .cornerRadius(14)
+                .scaleEffect(showAddedToCart ? 1.01 : 1.0)
+                .shadow(color: (showAddedToCart ? Color.green : Color.blue).opacity(0.22), radius: 12, x: 0, y: 6)
             }
             .disabled(product.stock <= 0)
             .opacity(product.stock <= 0 ? 0.5 : 1.0)
@@ -380,21 +410,8 @@ struct FullScreenImageView: View {
     var body: some View {
         ZStack {
             (colorScheme == .dark ? Color.black : Color.white).ignoresSafeArea()
-            
+
             VStack {
-                HStack {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(colorScheme == .dark ? .white : .black)
-                            .frame(width: 36, height: 36)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                    }
-                    Spacer()
-                }
-                .padding(16)
-                
                 Spacer()
 
                 if imageUrls.isEmpty {
@@ -428,6 +445,20 @@ struct FullScreenImageView: View {
                 }
 
                 Spacer()
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NativeCircleIconButton(
+                    systemName: "xmark",
+                    action: { dismiss() },
+                    iconColor: .primary,
+                    size: 35.5,
+                    iconSize: 15,
+                    showBackground: false
+                )
             }
         }
     }
