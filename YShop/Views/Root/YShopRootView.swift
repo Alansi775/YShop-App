@@ -55,7 +55,7 @@ struct YShopRootView: View {
                                     .padding(.bottom, 22)
                             }
                         } else {
-                            DeliveryTabView()
+                            DeliveryHomeView()
                         }
                     } else if !authManager.isLoggedIn {
                         // Not logged in -> show LoginView

@@ -22,6 +22,9 @@ struct CheckoutView: View {
     @State private var showSuccessFeedback = false
     @State private var errorMessage: String?
     @State private var storeNames: [String: String] = [:]
+    @State private var storeDetails: [String: Store] = [:]
+    @State private var storesLoaded = false
+    @State private var deliveryTimesUpdated = 0 // Trigger for view refresh
 
     init(onOrderPlaced: ((String) -> Void)? = nil) {
         self.onOrderPlaced = onOrderPlaced
@@ -44,8 +47,150 @@ struct CheckoutView: View {
             .sorted { lhs, rhs in lhs.key < rhs.key }
             .map { (storeId: $0.key, items: $0.value) }
     }
+    
+    private func calculateDeliveryTime(for storeId: String, option: String) -> String {
+        print("192.168.1.51 [DELIVERY TIME] Checking conditions - storesLoaded: \(storesLoaded), storeId: \(storeId)")
+        guard storesLoaded else { 
+            print("192.168.1.51 [DELIVERY TIME] Stores not loaded yet")
+            return "N/A" 
+        }
+        
+        print("192.168.1.51 [DELIVERY TIME] Store details count: \(storeDetails.count)")
+        guard let store = storeDetails[storeId] else { 
+            print("192.168.1.51 [DELIVERY TIME] Store not found in storeDetails for id: \(storeId)")
+            return "N/A" 
+        }
+        
+        print("192.168.1.51 [DELIVERY TIME] Selected location: (\(selectedLatitude), \(selectedLongitude))")
+        guard selectedLatitude != 0, selectedLongitude != 0 else { 
+            print("192.168.1.51 [DELIVERY TIME] Location not set")
+            return "N/A" 
+        }
+        
+        guard let storeLat = store.latitude, let storeLon = store.longitude else {
+            print("192.168.1.51 [DELIVERY TIME] Store coordinates missing")
+            return "N/A"
+        }
+        
+        print("192.168.1.51 [DELIVERY TIME] Store location: (\(storeLat), \(storeLon)), Type: \(store.storeType ?? "unknown")")
+        
+        let storeType = store.storeType?.lowercased() ?? ""
+        let isFoodRelated = storeType.contains("food") || storeType.contains("pharmacy") || storeType.contains("market")
+        
+        if option == "Standard" {
+            if isFoodRelated {
+                // حساب المسافة بين المحل والعميل
+                let distance = calculateDistance(
+                    lat1: storeLat,
+                    lon1: storeLon,
+                    lat2: selectedLatitude,
+                    lon2: selectedLongitude
+                )
+                print("192.168.1.51 [DELIVERY TIME] Distance: \(distance) km")
+                // المسافة بالكيلومتر، تقريباً 1 كم = 5 دقائق + 15 دقيقة ثابتة
+                let travelTime = Int(distance * 5) + 25
+                let minTime = max(10, travelTime)
+                let maxTime = minTime + 5
+                print("192.168.1.51 [DELIVERY TIME] Standard Delivery: \(minTime)-\(maxTime) Mins")
+                return "\(minTime)-\(maxTime) Mins"
+            } else {
+                // ملابس ومنتجات أخرى
+                print("192.168.1.51 [DELIVERY TIME] Non-food item: 1-2 Days")
+                return "1-2 Days"
+            }
+        } else if option == "Drone" {
+            // حساب وقت الدرون (أسرع من التسليم العادي)
+            let distance = calculateDistance(
+                lat1: storeLat,
+                lon1: storeLon,
+                lat2: selectedLatitude,
+                lon2: selectedLongitude
+            )
+            // الدرون أسرع: 1 كم = 2 دقيقة
+            let droneTime = Int(distance * 2) + 13
+            let minTime = max(5, droneTime)
+            let maxTime = minTime + 5
+            print("192.168.1.51 [DELIVERY TIME] Drone Delivery: \(minTime)-\(maxTime) Mins")
+            return "\(minTime)-\(maxTime) Mins"
+        }
+        
+        return "N/A"
+    }
+    
+    private func calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Double {
+        // Haversine formula لحساب المسافة بالكيلومترات
+        let R = 6371.0 // نصف قطر الأرض بالكيلومترات
+        let dLat = (lat2 - lat1) * .pi / 180
+        let dLon = (lon2 - lon1) * .pi / 180
+        let a = sin(dLat / 2) * sin(dLat / 2) +
+                cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180) *
+                sin(dLon / 2) * sin(dLon / 2)
+        let c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return R * c
+    }
 
     var body: some View {
+        mainCheckoutView
+            .navigationTitle("Checkout")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NativeCircleIconButton(
+                        systemName: "xmark",
+                        action: { dismiss() },
+                        iconColor: .primary,
+                        size: 35.5,
+                        iconSize: 15,
+                        showBackground: false
+                    )
+                }
+            }
+            .sheet(isPresented: $showMapPicker) {
+                MapPickerView(
+                    isPresented: $showMapPicker,
+                    initialLatitude: selectedLatitude,
+                    initialLongitude: selectedLongitude,
+                    initialAddress: selectedAddress,
+                    onConfirm: { lat, lng, address in
+                        selectedLatitude = lat
+                        selectedLongitude = lng
+                        selectedAddress = address
+                    }
+                )
+                .presentationDetents([.large])
+            }
+            .sheet(isPresented: $showPaymentSheet) {
+                paymentSheet
+                    .presentationDetents([.fraction(0.35)])
+                    .presentationDragIndicator(.visible)
+            }
+            .alert("Order Error", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
+            .onAppear { prefillAddressFromProfile() }
+            .onChange(of: authManager.currentUser) { _, newUser in
+                if newUser != nil {
+                    prefillAddressFromProfile()
+                }
+            }
+            .onChange(of: selectedLatitude) { _, _ in
+                deliveryTimesUpdated += 1
+            }
+            .onChange(of: selectedLongitude) { _, _ in
+                deliveryTimesUpdated += 1
+            }
+            .task(id: cartManager.cartItems.map { "\($0.storeId)-\($0.productId)" }.joined(separator: ",")) {
+                await loadStoreNames()
+            }
+    }
+    
+    private var mainCheckoutView: some View {
         ZStack {
             // خلفية رمادية فاتحة فاخرة لإبراز الكروت البيضاء
             Color(.systemGroupedBackground).ignoresSafeArea()
@@ -66,17 +211,15 @@ struct CheckoutView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 110) // مساحة مريحة لكي لا يغطي الزر الطائر آخر عناصر القائمة
+                .padding(.bottom, 110)
             }
 
-            // الزر العائم السفلي المنفصل تماماً (خلفية شفافة)
             VStack {
                 Spacer()
                 floatingConfirmButton
             }
             .ignoresSafeArea(.keyboard)
 
-            // إشعار النجاح العلوي (Toast Notification)
             if showSuccessFeedback {
                 successBanner
                     .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
@@ -84,54 +227,6 @@ struct CheckoutView: View {
                     .frame(maxHeight: .infinity, alignment: .top)
                     .zIndex(2)
             }
-        }
-        // إعدادات الـ Navigation Bar والـ Toolbar الأصلية
-        .navigationTitle("Checkout")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                NativeCircleIconButton(
-                    systemName: "xmark",
-                    action: { dismiss() },
-                    iconColor: .primary,
-                    size: 35.5,
-                    iconSize: 15,
-                    showBackground: false
-                )
-            }
-        }
-        .sheet(isPresented: $showMapPicker) {
-            MapPickerView(
-                isPresented: $showMapPicker,
-                initialLatitude: selectedLatitude,
-                initialLongitude: selectedLongitude,
-                initialAddress: selectedAddress,
-                onConfirm: { lat, lng, address in
-                    selectedLatitude = lat
-                    selectedLongitude = lng
-                    selectedAddress = address
-                }
-            )
-            .presentationDetents([.large])
-        }
-        .sheet(isPresented: $showPaymentSheet) {
-            paymentSheet
-                .presentationDetents([.fraction(0.35)])
-                .presentationDragIndicator(.visible)
-        }
-        .alert("Order Error", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "")
-        }
-        .onAppear { prefillAddressFromProfile() }
-        .onChange(of: authManager.currentUser?.id) { _, _ in prefillAddressFromProfile() }
-        .task(id: cartManager.cartItems.map { "\($0.storeId)-\($0.productId)" }.joined(separator: ",")) {
-            await loadStoreNames()
         }
     }
 
@@ -158,10 +253,42 @@ struct CheckoutView: View {
                 .foregroundColor(Color(.label))
             
             HStack(spacing: 16) {
-                deliveryOptionCard(title: "Standard", icon: "truck.box.fill", time: "2-3 Days")
-                deliveryOptionCard(title: "Drone", icon: "airplane.path.dotted", time: "30 Mins")
+                let standardTime = calculateCombinedDeliveryTime(option: "Standard")
+                let droneTime = calculateCombinedDeliveryTime(option: "Drone")
+                
+                deliveryOptionCard(title: "Standard", icon: "truck.box.fill", time: standardTime)
+                deliveryOptionCard(title: "Drone", icon: "airplane.path.dotted", time: droneTime)
             }
         }
+        .id(storesLoaded)
+    }
+    
+    private func calculateCombinedDeliveryTime(option: String) -> String {
+        guard !groupedItems.isEmpty else { return "N/A" }
+        
+        // إذا كان هناك محل واحد فقط
+        if groupedItems.count == 1 {
+            return calculateDeliveryTime(for: groupedItems[0].storeId, option: option)
+        }
+        
+        // إذا كانت هناك محلات متعددة، احسب الحد الأقصى من الأوقات
+        var times: [Int] = []
+        for group in groupedItems {
+            let timeStr = calculateDeliveryTime(for: group.storeId, option: option)
+            // استخرج الرقم الأول من السلسلة (الحد الأدنى)
+            let components = timeStr.split(separator: "-")
+            if let minTimeStr = components.first?.trimmingCharacters(in: .letters.union(.whitespaces)),
+               let minTime = Int(minTimeStr) {
+                times.append(minTime)
+            }
+        }
+        
+        if let maxTime = times.max() {
+            let buffer = maxTime + 5
+            return "\(maxTime)-\(buffer) Mins"
+        }
+        
+        return "N/A"
     }
 
     private func deliveryOptionCard(title: String, icon: String, time: String) -> some View {
@@ -558,27 +685,52 @@ struct CheckoutView: View {
     }
 
     private func prefillAddressFromProfile() {
-        guard let user = authManager.currentUser else { return }
+        guard let user = authManager.currentUser else { 
+            print("❌ [DELIVERY] User not found in authManager")
+            return 
+        }
+        
+        print("📋 [DELIVERY] User from authManager - Lat: \(user.latitude ?? 0), Lng: \(user.longitude ?? 0)")
+        
         if selectedAddress.isEmpty { selectedAddress = user.address ?? "" }
-        if selectedLatitude == 0, let lat = user.latitude { selectedLatitude = lat }
-        if selectedLongitude == 0, let lng = user.longitude { selectedLongitude = lng }
+        if selectedLatitude == 0, let lat = user.latitude { 
+            selectedLatitude = lat
+            print("✅ [DELIVERY] Set selectedLatitude to \(lat)")
+        }
+        if selectedLongitude == 0, let lng = user.longitude { 
+            selectedLongitude = lng
+            print("✅ [DELIVERY] Set selectedLongitude to \(lng)")
+        }
         if buildingInfo.isEmpty { buildingInfo = user.buildingInfo ?? "" }
         if apartmentNumber.isEmpty { apartmentNumber = user.apartmentNumber ?? "" }
         if notes.isEmpty { notes = user.deliveryInstructions ?? "" }
+        
+        print("✅ [DELIVERY] Profile prefilled - Final Lat: \(selectedLatitude), Lng: \(selectedLongitude), Address: \(selectedAddress)")
     }
 
     private func loadStoreNames() async {
         let uniqueStoreIds = Set(cartManager.cartItems.map { $0.storeId }.filter { !$0.isEmpty })
-        guard !uniqueStoreIds.isEmpty else { return }
+        print("📦 [DELIVERY] Loading stores: \(uniqueStoreIds)")
+        guard !uniqueStoreIds.isEmpty else { 
+            print("❌ [DELIVERY] No store IDs found")
+            return 
+        }
         var resolvedNames: [String: String] = [:]
+        var resolvedDetails: [String: Store] = [:]
         for storeId in uniqueStoreIds {
             do {
                 let store = try await StoreService.getStoreDetail(id: storeId)
                 resolvedNames[storeId] = store.name
+                resolvedDetails[storeId] = store
+                print("✅ [DELIVERY] Loaded store \(storeId): \(store.name), Type: \(store.storeType ?? "unknown"), Lat: \(store.latitude ?? 0), Lng: \(store.longitude ?? 0)")
             } catch {
+                print("❌ [DELIVERY] Failed to load store \(storeId): \(error)")
                 resolvedNames[storeId] = "Store"
             }
         }
         storeNames = resolvedNames
+        storeDetails = resolvedDetails
+        storesLoaded = true
+        print("✅ [DELIVERY] All stores loaded. storesLoaded = true, count: \(storeDetails.count)")
     }
 }

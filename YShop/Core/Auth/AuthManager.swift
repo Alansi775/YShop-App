@@ -4,7 +4,7 @@ import Combine
 
 // MARK: - Enums
 enum UserRole: String, Codable {
-    case customer, driver
+    case customer, driver, deliveryDriver
 }
 
 // MARK: - Request Models
@@ -51,7 +51,7 @@ struct ChangePasswordRequest: Encodable {
 }
 
 // MARK: - Response Models
-struct SimpleUser: Codable {
+struct SimpleUser: Codable, Equatable {
     let id: String
     let name: String
     let surname: String?
@@ -79,6 +79,7 @@ struct SimpleUser: Codable {
         case rolePlain = "role"
         case isActive = "is_active"
         case isVerified = "is_verified"
+        case emailVerified = "email_verified"
         case address
         case latitude
         case longitude
@@ -110,10 +111,27 @@ struct SimpleUser: Codable {
         avatar = try? container.decode(String.self, forKey: .avatar)
         role = (try? container.decode(String.self, forKey: .role)) ?? (try? container.decode(String.self, forKey: .rolePlain)) ?? "customer"
         isActive = (try? container.decode(Bool.self, forKey: .isActive)) ?? true
-        isVerified = (try? container.decode(Bool.self, forKey: .isVerified)) ?? false
+        isVerified = Self.decodeFlexibleBool(container, primaryKey: .isVerified, fallbackKey: .emailVerified)
         address = try? container.decodeIfPresent(String.self, forKey: .address)
-        latitude = try? container.decodeIfPresent(Double.self, forKey: .latitude)
-        longitude = try? container.decodeIfPresent(Double.self, forKey: .longitude)
+        
+        // Handle latitude - try Double first, then String
+        if let latDouble = try? container.decodeIfPresent(Double.self, forKey: .latitude) {
+            latitude = latDouble
+        } else if let latString = try? container.decodeIfPresent(String.self, forKey: .latitude) {
+            latitude = Double(latString)
+        } else {
+            latitude = nil
+        }
+        
+        // Handle longitude - try Double first, then String
+        if let lonDouble = try? container.decodeIfPresent(Double.self, forKey: .longitude) {
+            longitude = lonDouble
+        } else if let lonString = try? container.decodeIfPresent(String.self, forKey: .longitude) {
+            longitude = Double(lonString)
+        } else {
+            longitude = nil
+        }
+        
         buildingInfo = try? container.decodeIfPresent(String.self, forKey: .buildingInfo)
         apartmentNumber = try? container.decodeIfPresent(String.self, forKey: .apartmentNumber)
         deliveryInstructions = try? container.decodeIfPresent(String.self, forKey: .deliveryInstructions)
@@ -141,6 +159,34 @@ struct SimpleUser: Codable {
         try container.encodeIfPresent(deliveryInstructions, forKey: .deliveryInstructions)
         try container.encodeIfPresent(createdAt, forKey: .createdAt)
         try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
+    }
+
+    private static func decodeFlexibleBool(_ container: KeyedDecodingContainer<CodingKeys>, primaryKey: CodingKeys, fallbackKey: CodingKeys) -> Bool {
+        if let boolValue = try? container.decodeIfPresent(Bool.self, forKey: primaryKey) {
+            return boolValue ?? false
+        }
+
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: primaryKey) {
+            return (intValue ?? 0) == 1
+        }
+
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: primaryKey) {
+            return ["1", "true", "yes"].contains(stringValue.lowercased())
+        }
+
+        if let boolValue = try? container.decodeIfPresent(Bool.self, forKey: fallbackKey) {
+            return boolValue ?? false
+        }
+
+        if let intValue = try? container.decodeIfPresent(Int.self, forKey: fallbackKey) {
+            return (intValue ?? 0) == 1
+        }
+
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: fallbackKey) {
+            return ["1", "true", "yes"].contains(stringValue.lowercased())
+        }
+
+        return false
     }
 }
 
@@ -342,10 +388,7 @@ class AuthManager: NSObject, ObservableObject {
                         if let token = self.token {
                             SocketService.shared.connectIfNeeded(token: token)
                         }
-                        Task {
-                            await CartManager.shared.refreshCart()
-                            await CartManager.shared.refreshActiveTrackingOrder()
-                        }
+                        self.refreshPostAuthState(for: self.userRole)
                     } else {
                         print("❌ [AUTH] User data not found in response")
                         // Do not immediately clear token; allow server verification to retry later
@@ -386,10 +429,7 @@ class AuthManager: NSObject, ObservableObject {
                 self.currentUser = response.user
                 self.isLoading = false
                 SocketService.shared.connectIfNeeded(token: response.token)
-                Task {
-                    await CartManager.shared.refreshCart()
-                    await CartManager.shared.refreshActiveTrackingOrder()
-                }
+                self.refreshPostAuthState(for: .customer)
             }
         } catch {
             DispatchQueue.main.async { self.errorMessage = error.localizedDescription; self.isLoading = false }
@@ -412,5 +452,20 @@ class AuthManager: NSObject, ObservableObject {
         CartManager.shared.clearLocalState()
         
         print("🚪 [LOGOUT] User logged out successfully")
+    }
+
+    private func refreshPostAuthState(for role: UserRole?) {
+        Task {
+            guard role == .customer else {
+                await MainActor.run {
+                    CartManager.shared.clearPendingTrackingOrder()
+                    CartManager.shared.setActiveTrackingOrder(nil)
+                }
+                return
+            }
+
+            await CartManager.shared.refreshCart()
+            await CartManager.shared.refreshActiveTrackingOrder()
+        }
     }
 }

@@ -32,7 +32,11 @@ final class DeliverySignupViewModel {
                 name: name.trimmingCharacters(in: .whitespaces),
                 email: email.trimmingCharacters(in: .whitespaces),
                 password: password,
-                phone: phone.trimmingCharacters(in: .whitespaces)
+                phone: phone.trimmingCharacters(in: .whitespaces),
+                nationalId: nationalId.trimmingCharacters(in: .whitespaces),
+                address: selectedAddress.trimmingCharacters(in: .whitespaces),
+                latitude: selectedLatitude,
+                longitude: selectedLongitude
             )
             
             // Application submitted - pending admin approval & email verification

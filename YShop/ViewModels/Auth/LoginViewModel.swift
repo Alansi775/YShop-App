@@ -33,7 +33,7 @@ final class LoginViewModel {
                 AuthManager.shared.token = response.token
                 AuthManager.shared.currentUser = response.user
                 // Determine role from API response
-                AuthManager.shared.userRole = response.user.role == "driver" ? .driver : .customer
+                AuthManager.shared.userRole = response.user.role.lowercased().contains("delivery") ? .deliveryDriver : .customer
                 AuthManager.shared.isLoggedIn = true
                 UserDefaults.standard.set(response.user.role, forKey: "userRole")
                 print("🎯 [LOGIN] Auth state updated for customer: \(response.user.email)")
@@ -70,7 +70,7 @@ final class LoginViewModel {
                 AuthManager.shared.token = response.token
                 AuthManager.shared.currentUser = response.user
                 // Determine role from API response
-                AuthManager.shared.userRole = response.user.role == "driver" ? .driver : .customer
+                AuthManager.shared.userRole = response.user.role.lowercased().contains("delivery") ? .deliveryDriver : .customer
                 AuthManager.shared.isLoggedIn = true
                 UserDefaults.standard.set(response.user.role, forKey: "userRole")
                 print("🎯 [DRIVER LOGIN] Auth state updated for driver: \(response.user.email)")

@@ -133,15 +133,15 @@ enum APIEndpoint {
     case getDriverProfile
     case updateDriverLocation
     case toggleWorking
-    case getDeliveryOffer
+    case getDeliveryOffer(latitude: Double, longitude: Double)
     case acceptOffer(String)
     case skipOffer(String)
-    case getSkippedOrders
+    case getSkippedOrders(latitude: Double, longitude: Double)
     case reclaimOrder(String)
     case getActiveOrder
     case pickupOrder(String)
     case deliverOrder(String)
-    case updateDeliveryLocation
+    case updateDeliveryLocation(String)
     case getDeliveryHistory
     case getDriverStats
 
@@ -225,33 +225,33 @@ enum APIEndpoint {
             return "/orders/\(id)/cancel"
 
         case .getDriverProfile:
-            return "/delivery/profile"
+            return "/delivery-requests/me"
         case .updateDriverLocation:
-            return "/delivery/location"
+            return "/delivery-requests/location"
         case .toggleWorking:
-            return "/delivery/toggle-working"
-        case .getDeliveryOffer:
-            return "/delivery/offers/next"
+            return "/delivery-requests/working"
+        case .getDeliveryOffer(let latitude, let longitude):
+            return "/delivery-requests/offer?latitude=\(latitude)&longitude=\(longitude)"
         case .acceptOffer(let offerId):
-            return "/delivery/offers/\(offerId)/accept"
+            return "/delivery-requests/offer/accept"
         case .skipOffer(let offerId):
-            return "/delivery/offers/\(offerId)/skip"
-        case .getSkippedOrders:
-            return "/delivery/skipped-orders"
+            return "/delivery-requests/offer/skip"
+        case .getSkippedOrders(let latitude, let longitude):
+            return "/delivery-requests/skipped-orders?latitude=\(latitude)&longitude=\(longitude)"
         case .reclaimOrder(let orderId):
-            return "/delivery/skipped-orders/\(orderId)/reclaim"
+            return "/delivery-requests/reclaim"
         case .getActiveOrder:
-            return "/delivery/active-order"
+            return "/delivery-requests/active-order"
         case .pickupOrder(let orderId):
-            return "/delivery/orders/\(orderId)/pickup"
+            return "/delivery-requests/orders/\(orderId)/pickup"
         case .deliverOrder(let orderId):
-            return "/delivery/orders/\(orderId)/deliver"
-        case .updateDeliveryLocation:
-            return "/delivery/location"
+            return "/delivery-requests/orders/\(orderId)/delivered"
+        case .updateDeliveryLocation(let orderId):
+            return "/delivery-requests/orders/\(orderId)/location"
         case .getDeliveryHistory:
-            return "/delivery/history"
+            return "/delivery-requests/history"
         case .getDriverStats:
-            return "/delivery/stats"
+            return "/delivery-requests/stats"
 
         case .sendAIMessage:
             return "/ai/messages"
@@ -276,19 +276,25 @@ enum APIEndpoint {
     var method: HTTPMethod {
         switch self {
         case .login, .signup, .deliverySignup, .deliveryLogin, .verifyEmail, .createProduct,
-             .addToCart, .checkout, .createOrder, .acceptOffer, .pickupOrder, .deliverOrder,
+                         .addToCart, .checkout, .createOrder, .acceptOffer, .pickupOrder, .deliverOrder,
                .sendOrderReceipt,
              .sendAIMessage, .createReturnRequest, .uploadReturnEvidence:
             return .post
 
-        case .updateProduct, .updateOrderStatus, .updateCartItem, .updateDriverLocation:
+        case .updateProduct, .updateOrderStatus, .updateCartItem, .updateDriverLocation, .updateDeliveryLocation:
             return .put
 
         case .deleteProduct, .removeCartItem, .cancelOrder, .skipOffer, .clearCart:
             return .delete
 
-        case .changePassword, .toggleWorking, .reclaimOrder:
+        case .changePassword:
             return .patch
+
+        case .toggleWorking:
+            return .put
+
+        case .reclaimOrder:
+            return .post
 
         default:
             return .get

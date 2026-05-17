@@ -49,6 +49,7 @@ struct YShopApp: App {
             }
             .environmentObject(authManager)
             .environmentObject(cartManager)
+            .environmentObject(locationManager)
         }
     }
 }

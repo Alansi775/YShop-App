@@ -48,7 +48,7 @@ struct OrderTrackingView: View {
                     iconColor: .primary,
                     size: 35.5,
                     iconSize: 14,
-                    showBackground: true
+                    showBackground: false
                 )
             }
         }
