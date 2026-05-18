@@ -37,6 +37,7 @@ final class LoginViewModel {
                 AuthManager.shared.isLoggedIn = true
                 UserDefaults.standard.set(response.user.role, forKey: "userRole")
                 print("🎯 [LOGIN] Auth state updated for customer: \(response.user.email)")
+                AuthManager.shared.refreshPostAuthState(for: AuthManager.shared.userRole)
             }
         } catch {
             print("❌ [LOGIN] Customer login failed: \(error.localizedDescription)")
@@ -74,6 +75,7 @@ final class LoginViewModel {
                 AuthManager.shared.isLoggedIn = true
                 UserDefaults.standard.set(response.user.role, forKey: "userRole")
                 print("🎯 [DRIVER LOGIN] Auth state updated for driver: \(response.user.email)")
+                AuthManager.shared.refreshPostAuthState(for: AuthManager.shared.userRole)
             }
         } catch {
             print("❌ [DRIVER LOGIN] Driver login failed: \(error.localizedDescription)")

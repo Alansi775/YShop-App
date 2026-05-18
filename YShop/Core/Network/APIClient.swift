@@ -284,8 +284,11 @@ enum APIEndpoint {
         case .updateProduct, .updateOrderStatus, .updateCartItem, .updateDriverLocation, .updateDeliveryLocation:
             return .put
 
-        case .deleteProduct, .removeCartItem, .cancelOrder, .skipOffer, .clearCart:
+        case .deleteProduct, .removeCartItem, .cancelOrder, .clearCart:
             return .delete
+
+        case .skipOffer:
+            return .post
 
         case .changePassword:
             return .patch

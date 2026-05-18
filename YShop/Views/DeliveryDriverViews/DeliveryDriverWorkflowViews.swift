@@ -15,6 +15,7 @@ struct DeliveryOfferSheet: View {
     let onSkip: () async -> Void
     let onTimeout: () -> Void
 
+    @EnvironmentObject private var locationManager: LocationManager
     @Environment(\.dismiss) private var dismiss
     @State private var remainingSeconds: Int
     @State private var countdownTimer: Timer?
@@ -56,6 +57,9 @@ struct DeliveryOfferSheet: View {
         .background(DeliveryTheme.darkBackground)
         .onAppear {
             startCountdown()
+            fetchRoutes()
+        }
+        .onReceive(locationManager.$currentLocation) { _ in
             fetchRoutes()
         }
         .onDisappear {
@@ -119,7 +123,7 @@ struct DeliveryOfferSheet: View {
             }
             if !routeToStore.isEmpty {
                 MapPolyline(coordinates: routeToStore)
-                    .stroke(.white, lineWidth: 4)
+                    .stroke(DeliveryTheme.routeBlue, lineWidth: 5)
             }
             if showFullRoute && !routeToCustomer.isEmpty {
                 MapPolyline(coordinates: routeToCustomer)
@@ -299,7 +303,7 @@ struct DeliveryOfferSheet: View {
     }
 
     private func fetchRoutes() {
-        guard let driver = driverLocation, let store = storeCoordinate else { return }
+        guard let driver = effectiveDriverLocation, let store = storeCoordinate else { return }
 
         Task {
             if let route = await MKRouteHelper.calculateRoute(from: driver, to: store) {
@@ -319,6 +323,10 @@ struct DeliveryOfferSheet: View {
                 }
             }
         }
+    }
+
+    private var effectiveDriverLocation: CLLocationCoordinate2D? {
+        locationManager.currentLocation ?? driverLocation
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {
@@ -399,7 +407,7 @@ struct DeliveryNavigationView: View {
         }
         .onReceive(locationManager.$currentLocation) { newLocation in
             checkProximity(to: newLocation)
-            if Date().timeIntervalSince(lastRouteRefresh) > 10 {
+            if routePoints.isEmpty || Date().timeIntervalSince(lastRouteRefresh) > 10 {
                 Task { await refreshRoute() }
             }
         }
@@ -448,7 +456,7 @@ struct DeliveryNavigationView: View {
             }
             if !routePoints.isEmpty {
                 MapPolyline(coordinates: routePoints)
-                    .stroke(phase == .goingToStore ? .white : DeliveryTheme.accentBlue, lineWidth: 5)
+                    .stroke(DeliveryTheme.routeBlue, lineWidth: 5)
             }
         }
         .mapStyle(.standard(elevation: .flat))

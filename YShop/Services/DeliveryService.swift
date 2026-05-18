@@ -47,8 +47,69 @@ class DeliveryService {
     }
 
     // MARK: - Get Delivery Offer
-    static func getDeliveryOffer(latitude: Double, longitude: Double) async throws -> DeliveryOffer {
-        try await APIClient.shared.request(.getDeliveryOffer(latitude: latitude, longitude: longitude))
+    static func getDeliveryOffer(latitude: Double, longitude: Double) async throws -> DeliveryOffer? {
+        // الـ Backend يرجع flat response، نفك ترميزه يدوياً
+        struct FlatOfferResponse: Decodable {
+            let success: Bool
+            let data: FlatOfferData?
+        }
+        
+        struct FlatOfferData: Decodable {
+            let order_id: Int
+            let store_id: Int?
+            let store_name: String?
+            let store_latitude: Double?
+            let store_longitude: Double?
+            let store_phone: String?
+            let total_price: Double
+            let currency: String?
+            let distance_to_store: Double?
+            let estimated_earnings: Double
+            let expires_at: String?
+            let remaining_seconds: Int?
+            let customer_latitude: Double?
+            let customer_longitude: Double?
+            let customer_address: String?
+        }
+        
+        let response: FlatOfferResponse = try await APIClient.shared.request(
+            .getDeliveryOffer(latitude: latitude, longitude: longitude)
+        )
+        
+        guard let data = response.data else { return nil }
+        
+        // نبني Order من الـ flat data
+        let orderJSON: [String: Any] = [
+            "id": data.order_id,
+            "user_id": "",
+            "store_id": data.store_id ?? 0,
+            "items": [],
+            "total_price": data.total_price,
+            "status": "confirmed",
+            "store_name": data.store_name ?? "Store",
+            "shipping_address": data.customer_address ?? "",
+            "store_latitude": data.store_latitude ?? 0,
+            "store_longitude": data.store_longitude ?? 0,
+            "location_Latitude": data.customer_latitude ?? 0,
+            "location_Longitude": data.customer_longitude ?? 0
+        ]
+        
+        let orderData = try JSONSerialization.data(withJSONObject: orderJSON)
+        let order = try JSONDecoder().decode(Order.self, from: orderData)
+        
+        // نبني DeliveryOffer ونحقن الـ Order
+        return DeliveryOffer(
+            id: "offer_\(data.order_id)",
+            orderId: "\(data.order_id)",
+            driverId: nil,
+            order: order,
+            estimatedTime: data.remaining_seconds.map { $0 / 60 },
+            bidPrice: data.estimated_earnings,
+            status: .pending,
+            expiresAt: data.expires_at,
+            createdAt: nil,
+            updatedAt: nil
+        )
     }
 
     // MARK: - Accept Offer

@@ -454,7 +454,7 @@ class AuthManager: NSObject, ObservableObject {
         print("🚪 [LOGOUT] User logged out successfully")
     }
 
-    private func refreshPostAuthState(for role: UserRole?) {
+    func refreshPostAuthState(for role: UserRole?) {
         Task {
             guard role == .customer else {
                 await MainActor.run {

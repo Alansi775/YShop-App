@@ -4,25 +4,29 @@ import CoreLocation
 // MARK: - Brand Colors
 
 enum DeliveryTheme {
-    static let darkBackground = Color(red: 0.07, green: 0.07, blue: 0.07)
-    static let cardBackground = Color(red: 0.12, green: 0.12, blue: 0.12)
-    static let primaryText = Color(red: 0.93, green: 0.93, blue: 0.93)
-    static let secondaryText = Color(red: 0.69, green: 0.69, blue: 0.69)
+    static let darkBackground = Color(.systemBackground)
+    static let cardBackground = Color(.secondarySystemBackground)
+    static let primaryText = Color(.label)
+    static let secondaryText = Color(.secondaryLabel)
     static let accentBlue = Color(red: 0.16, green: 0.47, blue: 1.0)
     static let accentGreen = Color(red: 0.0, green: 0.90, blue: 0.46)
     static let accentRed = Color(red: 1.0, green: 0.32, blue: 0.32)
     static let accentOrange = Color(red: 1.0, green: 0.60, blue: 0.0)
-    static let separator = Color(red: 0.20, green: 0.20, blue: 0.20)
+    static let separator = Color(.separator)
+    static let routeBlue = Color(red: 0.0, green: 0.48, blue: 1.0)
 }
 
 // MARK: - Delivery Home View
 
 struct DeliveryHomeView: View {
     @EnvironmentObject private var authManager: AuthManager
+    @EnvironmentObject private var cartManager: CartManager
     @EnvironmentObject private var locationManager: LocationManager
+    @AppStorage("deliveryActiveOrderId") private var storedActiveOrderId: String = ""
 
     @State private var driverProfile: DeliveryProfile?
     @State private var activeOrder: Order?
+    @State private var journeyOrder: Order?
     @State private var pendingOffer: DeliveryOffer?
     @State private var isWorking = false
     @State private var isLoading = true
@@ -94,10 +98,15 @@ struct DeliveryHomeView: View {
                     onSkip: { await skipOffer(offer) },
                     onTimeout: { pendingOffer = nil }
                 )
+                .interactiveDismissDisabled(true)
+                .presentationDetents([.large])
             }
-            .fullScreenCover(item: $activeOrder) { order in
+            .fullScreenCover(item: $journeyOrder, onDismiss: {
+                journeyOrder = nil
+            }) { order in
                 DeliveryNavigationView(order: order) {
                     activeOrder = nil
+                    journeyOrder = nil
                     Task { await loadDriverStatus() }
                 }
             }
@@ -197,6 +206,8 @@ struct DeliveryHomeView: View {
                 title: "You are Offline",
                 message: "Go online to receive orders."
             )
+        } else if let activeOrder {
+            activeDeliveryCard(order: activeOrder)
         } else {
             waitingForOrders
         }
@@ -265,6 +276,52 @@ struct DeliveryHomeView: View {
                 .background(DeliveryTheme.cardBackground, in: Capsule())
             }
         }
+    }
+
+    private func activeDeliveryCard(order: Order) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Active Delivery")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(DeliveryTheme.primaryText)
+                    Text("You already accepted this order")
+                        .font(.system(size: 13))
+                        .foregroundColor(DeliveryTheme.secondaryText)
+                }
+
+                Spacer()
+
+                Text(order.status.displayTitle)
+                    .font(.system(size: 11, weight: .bold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(DeliveryTheme.accentBlue.opacity(0.12), in: Capsule())
+                    .foregroundColor(DeliveryTheme.accentBlue)
+            }
+
+            Text("New offers stay paused until this delivery is completed or cancelled.")
+                .font(.system(size: 12))
+                .foregroundColor(DeliveryTheme.secondaryText)
+
+            profileRow(icon: "storefront", text: order.storeName ?? "Store")
+            profileRow(icon: "person.fill", text: order.customerName ?? "Customer")
+            profileRow(icon: "mappin.and.ellipse", text: order.shippingAddress ?? order.deliveryAddress ?? "Delivery address")
+
+            Button {
+                journeyOrder = order
+            } label: {
+                Text("Open Journey")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(DeliveryTheme.accentBlue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
+        .padding(20)
+        .background(DeliveryTheme.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.horizontal, 16)
     }
 
     // MARK: - Profile Sheet
@@ -358,9 +415,13 @@ struct DeliveryHomeView: View {
                 driverProfile = profile
                 isWorking = profile.isWorking
                 isLoading = false
+                if storedActiveOrderId.isEmpty, let lastOrderId = cartManager.lastOrderId, !lastOrderId.isEmpty {
+                    storedActiveOrderId = lastOrderId
+                }
             }
 
             await checkActiveOrder()
+            await restoreStoredActiveOrderIfNeeded()
 
             if profile.isWorking && profile.isApproved {
                 startLocationTracking()
@@ -377,18 +438,46 @@ struct DeliveryHomeView: View {
     private func checkActiveOrder() async {
         do {
             let order = try await DeliveryService.getActiveOrder()
-            // ✅ تأكد إن الطلب فعلاً موجود (id غير فاضي)
             await MainActor.run {
                 if !order.id.isEmpty {
                     activeOrder = order
-                } else {
-                    activeOrder = nil
+                    storedActiveOrderId = order.id
                 }
             }
         } catch {
-            // No active order — that's fine
             await MainActor.run {
-                activeOrder = nil
+                if activeOrder == nil {
+                    activeOrder = nil
+                }
+            }
+        }
+    }
+
+    private func restoreStoredActiveOrderIfNeeded() async {
+        if storedActiveOrderId.isEmpty, let lastOrderId = cartManager.lastOrderId, !lastOrderId.isEmpty {
+            await MainActor.run {
+                storedActiveOrderId = lastOrderId
+            }
+        }
+
+        guard activeOrder == nil, journeyOrder == nil, !storedActiveOrderId.isEmpty else { return }
+
+        do {
+            let order = try await OrderService.getOrderDetail(id: storedActiveOrderId)
+            await MainActor.run {
+                if order.status.isTrackable {
+                    activeOrder = order
+                } else {
+                    activeOrder = nil
+                    journeyOrder = nil
+                    storedActiveOrderId = ""
+                }
+            }
+        } catch {
+            await MainActor.run {
+                if activeOrder == nil {
+                    storedActiveOrderId = ""
+                }
             }
         }
     }
@@ -454,7 +543,7 @@ struct DeliveryHomeView: View {
     }
 
     private func checkForOffer() async {
-        guard isWorking, activeOrder == nil, pendingOffer == nil,
+        guard isWorking, activeOrder == nil, journeyOrder == nil, pendingOffer == nil,
               let coord = locationManager.currentLocation else { return }
 
         do {
@@ -478,6 +567,8 @@ struct DeliveryHomeView: View {
             await MainActor.run {
                 pendingOffer = nil
                 activeOrder = order
+                journeyOrder = order
+                storedActiveOrderId = order?.id ?? offer.orderId
                 offerPollingTimer?.invalidate()
             }
         } catch {
