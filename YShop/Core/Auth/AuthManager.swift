@@ -233,6 +233,7 @@ class AuthManager: NSObject, ObservableObject {
     @Published var currentUser: SimpleUser?
     @Published var isLoading = false
     @Published var errorMessage: String?
+@Published var heading: Double? = nil
 
     private let keychainHelper = KeychainHelper.shared
     private let session: URLSession

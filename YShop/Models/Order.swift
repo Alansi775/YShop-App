@@ -42,7 +42,7 @@ struct Order: Codable, Identifiable {
     let id: String
     let userId: String
     let storeId: String
-    let items: [CartItem]
+    var items: [CartItem]  // Changed from 'let' to 'var' to allow mutation
     let totalPrice: Double
     let status: OrderStatus
     let deliveryAddress: String?

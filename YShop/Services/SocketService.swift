@@ -12,6 +12,7 @@ import SwiftUI
 class SocketService: NSObject, ObservableObject {
     @Published var isConnected = false
     @Published var errorMessage: String?
+@Published var heading: Double? = nil
 
     static let shared = SocketService()
 

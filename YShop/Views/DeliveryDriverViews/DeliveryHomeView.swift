@@ -415,13 +415,10 @@ struct DeliveryHomeView: View {
                 driverProfile = profile
                 isWorking = profile.isWorking
                 isLoading = false
-                if storedActiveOrderId.isEmpty, let lastOrderId = cartManager.lastOrderId, !lastOrderId.isEmpty {
-                    storedActiveOrderId = lastOrderId
-                }
             }
 
+            // فقط checkActiveOrder — بدون restore
             await checkActiveOrder()
-            await restoreStoredActiveOrderIfNeeded()
 
             if profile.isWorking && profile.isApproved {
                 startLocationTracking()
@@ -436,51 +433,31 @@ struct DeliveryHomeView: View {
     }
 
     private func checkActiveOrder() async {
-        do {
-            let order = try await DeliveryService.getActiveOrder()
+    do {
+        print("🔍 Checking active order...")
+        let order = try await DeliveryService.getActiveOrder()
+        if let order = order {
+            print("✅ Active order found: \(order.id)")
             await MainActor.run {
-                if !order.id.isEmpty {
-                    activeOrder = order
-                    storedActiveOrderId = order.id
-                }
+                activeOrder = order
+                storedActiveOrderId = order.id
             }
-        } catch {
+        } else {
+            print("❌ Server returned nil")
             await MainActor.run {
-                if activeOrder == nil {
-                    activeOrder = nil
-                }
+                activeOrder = nil
+                storedActiveOrderId = ""
             }
+        }
+    } catch {
+        print("❌ Error: \(error)")
+        await MainActor.run {
+            activeOrder = nil
+            storedActiveOrderId = ""
         }
     }
+}
 
-    private func restoreStoredActiveOrderIfNeeded() async {
-        if storedActiveOrderId.isEmpty, let lastOrderId = cartManager.lastOrderId, !lastOrderId.isEmpty {
-            await MainActor.run {
-                storedActiveOrderId = lastOrderId
-            }
-        }
-
-        guard activeOrder == nil, journeyOrder == nil, !storedActiveOrderId.isEmpty else { return }
-
-        do {
-            let order = try await OrderService.getOrderDetail(id: storedActiveOrderId)
-            await MainActor.run {
-                if order.status.isTrackable {
-                    activeOrder = order
-                } else {
-                    activeOrder = nil
-                    journeyOrder = nil
-                    storedActiveOrderId = ""
-                }
-            }
-        } catch {
-            await MainActor.run {
-                if activeOrder == nil {
-                    storedActiveOrderId = ""
-                }
-            }
-        }
-    }
     private func toggleWorking() async {
         guard let profile = driverProfile, profile.isApproved, !isUpdatingWorking else { return }
 
@@ -562,13 +539,14 @@ struct DeliveryHomeView: View {
     private func acceptOffer(_ offer: DeliveryOffer) async {
         do {
             _ = try await DeliveryService.acceptDeliveryOffer(orderId: offer.orderId)
-            let order = (try? await DeliveryService.getActiveOrder()) ?? offer.order ?? nil
+            let serverOrder = try? await DeliveryService.getActiveOrder()
+            let resolverOrder = serverOrder ?? offer.order ?? buildOrderFromOffer(offer)
 
             await MainActor.run {
                 pendingOffer = nil
-                activeOrder = order
-                journeyOrder = order
-                storedActiveOrderId = order?.id ?? offer.orderId
+                activeOrder = resolverOrder
+                journeyOrder = resolverOrder
+                storedActiveOrderId = resolverOrder?.id ?? offer.orderId
                 offerPollingTimer?.invalidate()
             }
         } catch {
@@ -576,6 +554,26 @@ struct DeliveryHomeView: View {
                 errorMessage = "Failed to accept: \(error.localizedDescription)"
             }
         }
+    }
+
+    private func buildOrderFromOffer(_ offer: DeliveryOffer) -> Order? {
+        let json: [String: Any] = [
+            "id": offer.orderId,
+            "user_id": "",
+            "store_id": offer.order?.storeId ?? "0",
+            "items": [] as [[String: Any]],
+            "total_price": offer.order?.totalPrice ?? offer.bidPrice,
+            "status": "confirmed",
+            "store_name": offer.order?.storeName ?? "Store",
+            "shipping_address": offer.order?.shippingAddress ?? "",
+            "store_latitude": offer.order?.storeLatitude ?? 0,
+            "store_longitude": offer.order?.storeLongitude ?? 0,
+            "location_Latitude": offer.order?.customerLatitude ?? 0,
+            "location_Longitude": offer.order?.customerLongitude ?? 0
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: json),
+              let order = try? JSONDecoder().decode(Order.self, from: data) else { return nil }
+        return order
     }
 
     private func skipOffer(_ offer: DeliveryOffer) async {

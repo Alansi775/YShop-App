@@ -14,6 +14,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var isLocationEnabled = false
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published var errorMessage: String?
+@Published var heading: Double? = nil
 
     private let locationManager = CLLocationManager()
 
@@ -36,10 +37,12 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     func startUpdatingLocation() {
         locationManager.startUpdatingLocation()
+        locationManager.startUpdatingHeading()
     }
 
     func stopUpdatingLocation() {
         locationManager.stopUpdatingLocation()
+        locationManager.stopUpdatingHeading()
     }
 
     // MARK: - Authorization Check
@@ -69,8 +72,10 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         errorMessage = nil
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        errorMessage = error.localizedDescription
+    func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        DispatchQueue.main.async {
+            self.heading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
+        }
     }
 
     // MARK: - Helper Methods

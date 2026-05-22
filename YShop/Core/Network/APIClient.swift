@@ -214,7 +214,7 @@ enum APIEndpoint {
         case .createOrder:
             return "/orders"
         case .getUserOrders:
-            return "/orders"
+            return "/orders/user"
         case .getOrderDetail(let id):
             return "/orders/\(id)"
         case .sendOrderReceipt(let id):
