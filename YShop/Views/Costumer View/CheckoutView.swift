@@ -173,7 +173,11 @@ struct CheckoutView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
-            .onAppear { prefillAddressFromProfile() }
+            .task {
+                await authManager.refreshCurrentUser()
+                prefillAddressFromProfile()
+                await loadStoreNames()
+            }
             .onChange(of: authManager.currentUser) { _, newUser in
                 if newUser != nil {
                     prefillAddressFromProfile()
@@ -184,9 +188,6 @@ struct CheckoutView: View {
             }
             .onChange(of: selectedLongitude) { _, _ in
                 deliveryTimesUpdated += 1
-            }
-            .task(id: cartManager.cartItems.map { "\($0.storeId)-\($0.productId)" }.joined(separator: ",")) {
-                await loadStoreNames()
             }
     }
     
@@ -650,33 +651,34 @@ struct CheckoutView: View {
                 paymentMethod: selectedPaymentMethod, deliveryOption: deliveryOption
             )
 
-            if let lastOrderId = createdOrderIds.last {
-                cartManager.setLastOrderId(lastOrderId)
-                cartManager.presentTrackingOrder(id: lastOrderId)
-                if let createdOrder = try? await OrderService.getOrderDetail(id: lastOrderId) {
-                    cartManager.setActiveTrackingOrder(createdOrder)
-                    Task {
-                        do {
-                            var store: Store? = nil
-                            if !createdOrder.storeId.isEmpty { store = try? await StoreService.getStoreDetail(id: createdOrder.storeId) }
-                            let customer = authManager.currentUser
-                            let pdf = ReceiptService.generateReceiptPDF(order: createdOrder, store: store, customer: customer)
+                if let lastOrderId = createdOrderIds.last {
+                    cartManager.setLastOrderId(lastOrderId)
+                    cartManager.presentTrackingOrder(id: lastOrderId)
 
-                            if let customerEmail = authManager.currentUser?.email {
-                                try await ReceiptService.sendReceipt(orderId: createdOrder.id, pdfData: pdf, recipientEmail: customerEmail, recipientType: "customer")
-                            }
-                            if let storeEmail = store?.email {
-                                try await ReceiptService.sendReceipt(orderId: createdOrder.id, pdfData: pdf, recipientEmail: storeEmail, recipientType: "store_owner")
-                            }
-                        } catch { print("⚠️ [Receipt] Failed to send receipt: \(error)") }
+                    if let createdOrder = try? await OrderService.getOrderDetail(id: lastOrderId) {
+                        cartManager.setActiveTrackingOrder(createdOrder)
+
+                        var store: Store? = nil
+                        if !createdOrder.storeId.isEmpty {
+                            store = try? await StoreService.getStoreDetail(id: createdOrder.storeId)
+                        }
+
+                        let customer = authManager.currentUser
+                        let pdf = ReceiptService.generateReceiptPDF(order: createdOrder, store: store, customer: customer)
+
+                        if let customerEmail = authManager.currentUser?.email {
+                            try await ReceiptService.sendReceipt(orderId: createdOrder.id, pdfData: pdf, recipientEmail: customerEmail, recipientType: "customer")
+                        }
+                    } else {
+                        await cartManager.refreshActiveTrackingOrder()
                     }
+
+                    await cartManager.clearCart()
+                    withAnimation(.easeOut(duration: 0.2)) { showSuccessFeedback = true }
+                    try? await Task.sleep(nanoseconds: 900_000_000)
+                    onOrderPlaced?(lastOrderId)
+                    dismiss()
                 }
-                await cartManager.clearCart()
-                withAnimation(.easeOut(duration: 0.2)) { showSuccessFeedback = true }
-                try? await Task.sleep(nanoseconds: 900_000_000)
-                onOrderPlaced?(lastOrderId)
-                dismiss()
-            }
         } catch {
             errorMessage = error.localizedDescription
             if error.localizedDescription.contains("Duplicate order submission blocked") { dismiss() }

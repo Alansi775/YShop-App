@@ -129,8 +129,8 @@ struct Order: Codable, Identifiable {
         case shippingAddress = "shipping_address"
         case storeName = "store_name"
         case phone
-        case customerName
-        case customerPhone
+        case customerName = "customer_name"
+        case customerPhone = "customer_phone"
         case driverName = "driver_name"
         case driverId
         case driverLocation
@@ -150,8 +150,8 @@ struct Order: Codable, Identifiable {
         case total = "total"
         case storeName = "storeName"
         case customer
-        case customerName
-        case customerPhone
+        case customerName = "customerName"
+        case customerPhone = "customerPhone"
         case driverName
         case driverId = "driverId"
         case driverLocation = "driver_location"
@@ -223,8 +223,10 @@ struct Order: Codable, Identifiable {
             ?? (try? container.decodeIfPresent(String.self, forKey: .updatedAt))
         updatedAt = try? container.decodeIfPresent(String.self, forKey: .updatedAt)
 
-        customerName = try? altContainer.decodeIfPresent(String.self, forKey: .customerName)
-        customerPhone = try? altContainer.decodeIfPresent(String.self, forKey: .customerPhone)
+        customerName = (try? container.decodeIfPresent(String.self, forKey: .customerName))
+            ?? (try? altContainer.decodeIfPresent(String.self, forKey: .customerName))
+        customerPhone = (try? container.decodeIfPresent(String.self, forKey: .customerPhone))
+            ?? (try? altContainer.decodeIfPresent(String.self, forKey: .customerPhone))
         driverName = (try? container.decodeIfPresent(String.self, forKey: .driverName))
             ?? (try? altContainer.decodeIfPresent(String.self, forKey: .driverName))
         driverId = (try? altContainer.decodeIfPresent(String.self, forKey: .driverId))

@@ -56,10 +56,15 @@ class OrderService {
     // MARK: - Get Order Detail
     static func getOrderDetail(id: String) async throws -> Order {
         do {
+            let orders = try await getUserOrders()
+            if let matchingOrder = orders.first(where: { $0.id == id }) {
+                return matchingOrder
+            }
+
             let response: APIResponse<Order> = try await APIClient.shared.request(.getOrderDetail(id))
             return response.data
         } catch {
-            return try await APIClient.shared.request(.getOrderDetail(id))
+            throw error
         }
     }
 

@@ -229,6 +229,9 @@ struct DeliveryNavigationView: View {
     @State private var cardOffset: CGFloat = 0
     @State private var heading: Double = 0
     @State private var headingTimer: Timer?
+    @State private var traveledPoints: [CLLocationCoordinate2D] = []
+    @State private var lastUserInteraction: Date = .distantPast
+    @State private var autoRecenterTimer: Timer?
 
     private let arrivalThreshold: CLLocationDistance = 100
     private let collapsedOffset: CGFloat = 90
@@ -262,20 +265,27 @@ struct DeliveryNavigationView: View {
             Text("Great job! The order has been delivered successfully.")
         }
         .task { await refreshRoute(); startLocationTracking(); startHeadingTracking() }
-        .onDisappear { locationUpdateTimer?.invalidate(); headingTimer?.invalidate() }
+        .onDisappear {
+            locationUpdateTimer?.invalidate()
+            headingTimer?.invalidate()
+            autoRecenterTimer?.invalidate()
+        }
         .onReceive(locationManager.$currentLocation) { newLocation in
             checkProximity(to: newLocation)
+            if let loc = newLocation {
+                // أضف الموقع لمسار المقطوع
+                traveledPoints.append(loc)
+                // حدّث الكاميرا
+                if isFollowingDriver { updateMapCamera(driver: loc) }
+            }
             if routePoints.isEmpty || Date().timeIntervalSince(lastRouteRefresh) > 10 {
                 Task { await refreshRoute() }
             }
             if !isFollowingDriver, let loc = newLocation {
                 isFollowingDriver = true
-                mapPosition = .region(MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: loc.latitude, longitude: loc.longitude),
-                    span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)
-                ))
+                updateMapCamera(driver: loc)
             }
-        }
+        }   
         .overlay(alignment: .bottom) {
             if let errorMessage {
                 Text(errorMessage).padding()
@@ -304,12 +314,32 @@ struct DeliveryNavigationView: View {
             if let driver = locationManager.currentLocation {
                 Annotation("You", coordinate: driver) { compassArrow }
             }
+            // الجزء اللي مشى منه → رمادي
+            if traveledPoints.count >= 2 {
+                MapPolyline(coordinates: traveledPoints)
+                    .stroke(.gray.opacity(0.5), lineWidth: 5)
+            }
+            // الجزء القادم → أزرق
             if !routePoints.isEmpty {
-                MapPolyline(coordinates: routePoints).stroke(DeliveryTheme.routeBlue, lineWidth: 5)
+                MapPolyline(coordinates: routePoints)
+                    .stroke(DeliveryTheme.routeBlue, lineWidth: 5)
             }
         }
         .mapStyle(showSatellite ? .imagery(elevation: .flat) : .standard(elevation: .flat))
         .ignoresSafeArea()
+        .onMapCameraChange { _ in
+            // لما يلمس المستخدم الخريطة → وقف الـ auto-follow
+            lastUserInteraction = Date()
+            isFollowingDriver = false
+            // بعد ثانية → ارجع للـ follow
+            autoRecenterTimer?.invalidate()
+            autoRecenterTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+                isFollowingDriver = true
+                if let loc = locationManager.currentLocation {
+                    updateMapCamera(driver: loc)
+                }
+            }
+        }
     }
 
     // البوصلة الدوارة
@@ -320,7 +350,7 @@ struct DeliveryNavigationView: View {
                 .shadow(color: DeliveryTheme.accentBlue.opacity(0.5), radius: 8)
             Image(systemName: "location.north.fill")
                 .font(.system(size: 18, weight: .bold)).foregroundColor(.white)
-                .rotationEffect(.degrees(heading))
+                // الأيقونة ثابتة — الخريطة هي اللي تدور مع heading
         }
     }
 
@@ -750,10 +780,15 @@ struct DeliveryNavigationView: View {
     }
 
     private func updateMapCamera(driver: CLLocationCoordinate2D) {
-        withAnimation(.easeInOut(duration: 0.5)) {
-            mapPosition = .region(MKCoordinateRegion(
-                center: driver,
-                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+        guard isFollowingDriver else { return }
+        // الكاميرا تنظر نفس اتجاه الموصل — heading-up مثل Apple Maps
+        // نضع الموصل في أسفل الشاشة بزيادة offset للشمال
+        withAnimation(.easeInOut(duration: 0.4)) {
+            mapPosition = .camera(MapCamera(
+                centerCoordinate: driver,
+                distance: 500,
+                heading: heading,   // الكاميرا تواجه نفس اتجاه السواق
+                pitch: 45           // زاوية perspective مثل navigation apps
             ))
         }
     }
@@ -774,9 +809,12 @@ struct DeliveryNavigationView: View {
     // البوصلة — يقرأ الاتجاه من LocationManager
     private func startHeadingTracking() {
         headingTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
-            if let h = locationManager.heading {
-                DispatchQueue.main.async {
-                    withAnimation(.linear(duration: 0.3)) { self.heading = h }
+            guard let h = locationManager.heading else { return }
+            DispatchQueue.main.async {
+                withAnimation(.linear(duration: 0.3)) { self.heading = h }
+                // حدّث الكاميرا مع الـ heading
+                if self.isFollowingDriver, let loc = self.locationManager.currentLocation {
+                    self.updateMapCamera(driver: loc)
                 }
             }
         }

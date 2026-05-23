@@ -38,6 +38,7 @@ struct DeliveryHomeView: View {
 
     @State private var locationUpdateTimer: Timer?
     @State private var offerPollingTimer: Timer?
+    @State private var socketObserverId: UUID?
 
     var body: some View {
         NavigationStack {
@@ -462,28 +463,74 @@ struct DeliveryHomeView: View {
     }
 
     private func checkActiveOrder() async {
-    do {
-        print("🔍 Checking active order...")
-        let order = try await DeliveryService.getActiveOrder()
-        if let order = order {
-            print("✅ Active order found: \(order.id)")
-            await MainActor.run {
-                activeOrder = order
-                storedActiveOrderId = order.id
+        do {
+            print("🔍 Checking active order...")
+            let order = try await DeliveryService.getActiveOrder()
+            if let order = order {
+                print("✅ Active order found: \(order.id)")
+                await MainActor.run {
+                    activeOrder = order
+                    storedActiveOrderId = order.id
+                }
+                startOrderSocketObserver(orderId: order.id)
+            } else {
+                print("❌ Server returned nil")
+                await MainActor.run {
+                    activeOrder = nil
+                    storedActiveOrderId = ""
+                }
             }
-        } else {
-            print("❌ Server returned nil")
+        } catch {
+            print("❌ Error: \(error)")
             await MainActor.run {
                 activeOrder = nil
                 storedActiveOrderId = ""
             }
         }
-    } catch {
-        print("❌ Error: \(error)")
-        await MainActor.run {
-            activeOrder = nil
-            storedActiveOrderId = ""
+    }
+
+    private func startOrderSocketObserver(orderId: String) {
+    // امسح القديم أول
+    stopOrderSocketObserver()
+    
+    if let token = authManager.token {
+        SocketService.shared.connectIfNeeded(token: token)
+    }
+    
+    socketObserverId = SocketService.shared.observeOrder(orderId: orderId) {
+        Task {
+            // جاء تحديث من الـ server — تحقق من الـ order
+            guard let updatedOrder = try? await OrderService.getOrderDetail(id: orderId) else {
+                // الطلب ما موجود → امسح
+                await MainActor.run {
+                    self.activeOrder = nil
+                    self.journeyOrder = nil
+                    self.storedActiveOrderId = ""
+                    self.startOfferPolling()
+                }
+                return
+            }
+            
+            if updatedOrder.status.isTerminal || updatedOrder.driverId == nil {
+                await MainActor.run {
+                    self.activeOrder = nil
+                    self.journeyOrder = nil
+                    self.storedActiveOrderId = ""
+                    self.startOfferPolling()
+                }
+            } else {
+                await MainActor.run {
+                    self.activeOrder = updatedOrder
+                }
+            }
         }
+    }
+}
+
+private func stopOrderSocketObserver() {
+    if let id = socketObserverId, let orderId = activeOrder?.id {
+        SocketService.shared.removeObserver(orderId: orderId, observerId: id)
+        socketObserverId = nil
     }
 }
 
@@ -578,6 +625,11 @@ struct DeliveryHomeView: View {
                 storedActiveOrderId = resolverOrder?.id ?? offer.orderId
                 offerPollingTimer?.invalidate()
             }
+
+            // ابدأ مراقبة الـ order عبر Socket
+            if let orderId = resolverOrder?.id {
+                startOrderSocketObserver(orderId: orderId)
+            }
         } catch {
             await MainActor.run {
                 errorMessage = "Failed to accept: \(error.localizedDescription)"
@@ -623,6 +675,7 @@ struct DeliveryHomeView: View {
         locationUpdateTimer = nil
         offerPollingTimer?.invalidate()
         offerPollingTimer = nil
+        stopOrderSocketObserver()
     }
 }
 

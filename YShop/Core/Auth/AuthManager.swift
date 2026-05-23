@@ -298,6 +298,63 @@ class AuthManager: NSObject, ObservableObject {
         }
     }
 
+    func refreshCurrentUser() async {
+        guard let token = self.token else {
+            print("❌ [AUTH] No token to refresh user")
+            self.isLoggedIn = false
+            self.currentUser = nil
+            return
+        }
+
+        let url = URL(string: "\(baseURL)/auth/me")!
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        do {
+            let (data, response) = try await session.data(for: urlRequest)
+
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
+                print("❌ [AUTH] Token invalid (401) while refreshing user")
+                self.isLoggedIn = false
+                self.currentUser = nil
+                UserDefaults.standard.removeObject(forKey: self.roleKey)
+                return
+            }
+
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+
+            var resolvedUser: SimpleUser? = nil
+
+            if let apiResp = try? decoder.decode(APIResponse<SimpleUser>.self, from: data) {
+                resolvedUser = apiResp.data
+            }
+
+            if resolvedUser == nil, let directUser = try? decoder.decode(SimpleUser.self, from: data) {
+                resolvedUser = directUser
+            }
+
+            if resolvedUser == nil, let userResp = try? decoder.decode(UserResponse.self, from: data), let u = userResp.user {
+                resolvedUser = u
+            }
+
+            if let user = resolvedUser {
+                self.currentUser = user
+                self.isLoggedIn = true
+                print("✅ [AUTH] Refreshed current user: \(user.email)")
+                if let token = self.token {
+                    SocketService.shared.connectIfNeeded(token: token)
+                }
+                self.refreshPostAuthState(for: self.userRole)
+            } else {
+                print("❌ [AUTH] Failed to refresh current user")
+            }
+        } catch {
+            print("❌ [AUTH] Failed to refresh current user: \(error)")
+        }
+    }
+
     // Attempt to decode the JWT payload and extract a role/userType field.
     // This does NOT verify the token signature; it's only used to recover cached role info.
     private func decodeRoleFromJWT(_ token: String) -> String? {
@@ -329,84 +386,7 @@ class AuthManager: NSObject, ObservableObject {
     }
 
     private func fetchCurrentUser() {
-        guard let token = self.token else {
-            print("❌ [AUTH] No token to fetch user")
-            self.isLoggedIn = false
-            return
-        }
-        
-        let url = URL(string: "\(baseURL)/auth/me")!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "GET"
-        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        
-        Task {
-            do {
-                let (data, response) = try await session.data(for: urlRequest)
-
-                // Check for HTTP errors
-                if let httpResponse = response as? HTTPURLResponse {
-                    if httpResponse.statusCode == 401 {
-                        print("❌ [AUTH] Token invalid (401) - logging out")
-                        DispatchQueue.main.async {
-                            self.isLoggedIn = false
-                            self.currentUser = nil
-                            UserDefaults.standard.removeObject(forKey: self.roleKey)
-                        }
-                        return
-                    }
-                }
-
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-
-                // Try multiple possible response shapes from backend
-                var resolvedUser: SimpleUser? = nil
-
-                // 1) APIResponse wrapper with `data` containing user
-                if let apiResp = try? decoder.decode(APIResponse<SimpleUser>.self, from: data) {
-                    resolvedUser = apiResp.data
-                    print("✅ [AUTH] Decoded user from APIResponse<data>")
-                }
-
-                // 2) Direct user object
-                if resolvedUser == nil, let directUser = try? decoder.decode(SimpleUser.self, from: data) {
-                    resolvedUser = directUser
-                    print("✅ [AUTH] Decoded user from direct SimpleUser response")
-                }
-
-                // 3) { user: { ... } } shape
-                if resolvedUser == nil, let userResp = try? decoder.decode(UserResponse.self, from: data), let u = userResp.user {
-                    resolvedUser = u
-                    print("✅ [AUTH] Decoded user from UserResponse.user")
-                }
-
-                DispatchQueue.main.async {
-                    if let user = resolvedUser {
-                        self.currentUser = user
-                        self.isLoggedIn = true
-                        print("✅ [AUTH] User data fetched successfully: \(user.email)")
-                        if let token = self.token {
-                            SocketService.shared.connectIfNeeded(token: token)
-                        }
-                        self.refreshPostAuthState(for: self.userRole)
-                    } else {
-                        print("❌ [AUTH] User data not found in response")
-                        // Do not immediately clear token; allow server verification to retry later
-                        self.isLoggedIn = false
-                        self.currentUser = nil
-                    }
-                }
-            } catch {
-                print("❌ [AUTH] Failed to fetch current user: \(error)")
-                DispatchQueue.main.async {
-                    self.isLoggedIn = false
-                    self.currentUser = nil
-                    UserDefaults.standard.removeObject(forKey: self.roleKey)
-                    print("⚠️  [AUTH] Session cleared due to fetch failure")
-                }
-            }
-        }
+        Task { await refreshCurrentUser() }
     }
 
     func login(email: String, password: String) async throws {

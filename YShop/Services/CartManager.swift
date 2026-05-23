@@ -137,8 +137,20 @@ final class CartManager: ObservableObject {
                 setLastOrderId(latestOrder.id)
             } else {
                 setActiveTrackingOrder(nil)
+                setLastOrderId(nil)
             }
         } catch {
+            let orders = (try? await OrderService.getUserOrders()) ?? []
+            if let latestOrder = orders
+                .filter({ $0.status.isTrackable })
+                .max(by: Self.orderPriorityComparator) {
+                setActiveTrackingOrder(latestOrder)
+                setLastOrderId(latestOrder.id)
+            } else {
+                setActiveTrackingOrder(nil)
+                setLastOrderId(nil)
+            }
+
             errorMessage = error.localizedDescription
         }
     }
