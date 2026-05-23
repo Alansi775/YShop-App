@@ -16,6 +16,7 @@ struct OrderTrackingView: View {
     @State private var store: Store?
     @State private var mapPosition: MapCameraPosition = .automatic
     @State private var selectedProduct: Product?
+    @State private var routeCoordinates: [CLLocationCoordinate2D] = []
 
     var body: some View {
         ZStack {
@@ -74,9 +75,11 @@ struct OrderTrackingView: View {
             lastRefreshedAt = Date()
             cartManager.setActiveTrackingOrder(loadedOrder)
             await loadStoreDetails(storeId: loadedOrder.storeId)
+            await updateRoutePolyline(for: loadedOrder)
         } catch {
             errorMessage = error.localizedDescription
             order = nil
+            routeCoordinates = []
         }
 
         isLoading = false
@@ -98,6 +101,7 @@ struct OrderTrackingView: View {
             errorMessage = nil
             cartManager.setActiveTrackingOrder(loadedOrder)
             await loadStoreDetails(storeId: loadedOrder.storeId)
+            await updateRoutePolyline(for: loadedOrder)
 
             if loadedOrder.status.isTerminal {
                 stopTrackingSession()
@@ -161,26 +165,17 @@ struct OrderTrackingView: View {
                     storeIconView
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Order #\(order.id)")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(Color(.label))
-
                         Text(store?.name ?? order.storeName ?? "Store")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(Color(.label))
+
+                        Text("Order #\(order.id)")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(Color(.label))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
                 }
-
-                Spacer()
-
-                Text(order.status.displayTitle.uppercased())
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(1)
-                    .foregroundColor(order.status.accentColor)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(order.status.accentColor.opacity(0.12))
-                    .clipShape(Capsule())
             }
 
             Text(order.shippingAddress ?? order.deliveryAddress ?? "No delivery address")
@@ -241,11 +236,9 @@ struct OrderTrackingView: View {
 
             HStack(spacing: 10) {
                 infoChip(title: "Customer", value: order.customerName ?? "You")
-                infoChip(title: "Driver", value: order.driverId ?? "Not assigned")
             }
 
             HStack(spacing: 10) {
-                infoChip(title: "Store", value: order.storeName ?? order.storeId)
                 infoChip(title: "Created", value: order.createdAt ?? "Just now")
             }
 
@@ -312,16 +305,6 @@ struct OrderTrackingView: View {
                         .font(.system(size: 12, weight: .regular))
                         .foregroundColor(Color(.secondaryLabel))
                 }
-
-                Spacer()
-
-                Text(order.status.displayTitle)
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(order.status.accentColor)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(order.status.accentColor.opacity(0.12))
-                    .clipShape(Capsule())
             }
 
             Map(position: $mapPosition) {
@@ -343,8 +326,8 @@ struct OrderTrackingView: View {
                     }
                 }
 
-                if let route = mapRouteCoordinates(storeCoordinate: storeCoordinate, driverCoordinate: driverCoordinate, customerCoordinate: customerCoordinate) {
-                    MapPolyline(MKPolyline(coordinates: route, count: route.count))
+                if !routeCoordinates.isEmpty {
+                    MapPolyline(MKPolyline(coordinates: routeCoordinates, count: routeCoordinates.count))
                         .stroke(.blue.opacity(0.85), lineWidth: 4)
                 }
             }
@@ -549,19 +532,11 @@ struct OrderTrackingView: View {
         driverCoordinate: CLLocationCoordinate2D?,
         customerCoordinate: CLLocationCoordinate2D?
     ) -> [CLLocationCoordinate2D]? {
-        var coordinates = [CLLocationCoordinate2D]()
-
-        if let driverCoordinate {
-            coordinates.append(driverCoordinate)
-        } else if let storeCoordinate {
-            coordinates.append(storeCoordinate)
+        if !routeCoordinates.isEmpty {
+            return routeCoordinates
         }
 
-        if let customerCoordinate {
-            coordinates.append(customerCoordinate)
-        }
-
-        return coordinates.count > 1 ? coordinates : nil
+        return nil
     }
 
     private func storeCoordinate(for order: Order) -> CLLocationCoordinate2D? {
@@ -625,6 +600,38 @@ struct OrderTrackingView: View {
                 span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
             )
         )
+    }
+
+    private func updateRoutePolyline(for order: Order) async {
+        let storeCoordinate = storeCoordinate(for: order)
+        let customerCoordinate = customerCoordinate(for: order)
+        let driverCoordinate = coordinate(from: order.driverLocation)
+
+        let startCoordinate = driverCoordinate ?? storeCoordinate
+        guard let startCoordinate, let customerCoordinate else {
+            routeCoordinates = []
+            return
+        }
+
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: startCoordinate))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: customerCoordinate))
+        request.transportType = .automobile
+
+        do {
+            let response = try await MKDirections(request: request).calculate()
+            guard let route = response.routes.first else {
+                routeCoordinates = [startCoordinate, customerCoordinate]
+                return
+            }
+
+            let count = route.polyline.pointCount
+            var coords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: count)
+            route.polyline.getCoordinates(&coords, range: NSRange(location: 0, length: count))
+            routeCoordinates = coords
+        } catch {
+            routeCoordinates = [startCoordinate, customerCoordinate]
+        }
     }
 
     private func productForTrackingItem(item: CartItem, order: Order) -> Product? {

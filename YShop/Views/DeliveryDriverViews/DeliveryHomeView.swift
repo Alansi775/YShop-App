@@ -113,6 +113,13 @@ struct DeliveryHomeView: View {
             .task {
                 await loadDriverStatus()
             }
+            .onChange(of: authManager.isLoggedIn) { isLoggedIn in
+                if isLoggedIn {
+                    Task { await loadDriverStatus() }
+                } else {
+                    resetDeliverySessionState()
+                }
+            }
             .onDisappear {
                 stopAllTracking()
             }
@@ -372,6 +379,7 @@ struct DeliveryHomeView: View {
                 Task {
                     stopAllTracking()
                     await MainActor.run {
+                        resetDeliverySessionState()
                         authManager.logout()
                     }
                 }
@@ -409,6 +417,12 @@ struct DeliveryHomeView: View {
     // MARK: - Actions
 
     private func loadDriverStatus() async {
+        await MainActor.run {
+            activeOrder = nil
+            journeyOrder = nil
+            pendingOffer = nil
+        }
+
         do {
             let profile = try await DeliveryService.getDriverProfile()
             await MainActor.run {
@@ -430,6 +444,21 @@ struct DeliveryHomeView: View {
                 isLoading = false
             }
         }
+    }
+
+    private func resetDeliverySessionState() {
+        driverProfile = nil
+        activeOrder = nil
+        journeyOrder = nil
+        pendingOffer = nil
+        isWorking = false
+        isLoading = true
+        isUpdatingWorking = false
+        errorMessage = nil
+        showProfileSheet = false
+        showDashboard = false
+        storedActiveOrderId = ""
+        stopAllTracking()
     }
 
     private func checkActiveOrder() async {

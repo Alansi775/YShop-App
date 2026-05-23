@@ -53,6 +53,7 @@ struct Order: Codable, Identifiable {
     let updatedAt: String?
     let customerName: String?
     let customerPhone: String?
+    let driverName: String?
     let driverId: String?
     let driverLocation: String?
     let pickedUpAt: String?
@@ -62,6 +63,7 @@ struct Order: Codable, Identifiable {
     let customerLongitude: Double?
     let storeLatitude: Double?
     let storeLongitude: Double?
+    let storeIconUrl: String?
 
     init(
         id: String,
@@ -78,6 +80,7 @@ struct Order: Codable, Identifiable {
         updatedAt: String?,
         customerName: String?,
         customerPhone: String?,
+        driverName: String? = nil,
         driverId: String?,
         driverLocation: String?,
         pickedUpAt: String?,
@@ -86,7 +89,8 @@ struct Order: Codable, Identifiable {
         customerLatitude: Double? = nil,
         customerLongitude: Double? = nil,
         storeLatitude: Double? = nil,
-        storeLongitude: Double? = nil
+        storeLongitude: Double? = nil,
+        storeIconUrl: String? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -102,6 +106,7 @@ struct Order: Codable, Identifiable {
         self.updatedAt = updatedAt
         self.customerName = customerName
         self.customerPhone = customerPhone
+        self.driverName = driverName
         self.driverId = driverId
         self.driverLocation = driverLocation
         self.pickedUpAt = pickedUpAt
@@ -111,6 +116,7 @@ struct Order: Codable, Identifiable {
         self.customerLongitude = customerLongitude
         self.storeLatitude = storeLatitude
         self.storeLongitude = storeLongitude
+        self.storeIconUrl = storeIconUrl
     }
     
     enum CodingKeys: String, CodingKey {
@@ -125,6 +131,7 @@ struct Order: Codable, Identifiable {
         case phone
         case customerName
         case customerPhone
+        case driverName = "driver_name"
         case driverId
         case driverLocation
         case pickedUpAt = "picked_up_at"
@@ -135,6 +142,7 @@ struct Order: Codable, Identifiable {
         case customerLongitude = "location_Longitude"
         case storeLatitude = "store_latitude"
         case storeLongitude = "store_longitude"
+        case storeIconUrl = "store_icon_url"
     }
 
     enum AltCodingKeys: String, CodingKey {
@@ -144,6 +152,7 @@ struct Order: Codable, Identifiable {
         case customer
         case customerName
         case customerPhone
+        case driverName
         case driverId = "driverId"
         case driverLocation = "driver_location"
         case pickedUpAt = "picked_up_at"
@@ -204,6 +213,8 @@ struct Order: Codable, Identifiable {
         storeName = (try? container.decodeIfPresent(String.self, forKey: .storeName))
             ?? (try? altContainer.decodeIfPresent(String.self, forKey: .storeName))
 
+        storeIconUrl = (try? container.decodeIfPresent(String.self, forKey: .storeIconUrl))
+
         phone = (try? container.decodeIfPresent(String.self, forKey: .phone))
             ?? (try? altContainer.decodeIfPresent(String.self, forKey: .customerPhone))
 
@@ -214,6 +225,8 @@ struct Order: Codable, Identifiable {
 
         customerName = try? altContainer.decodeIfPresent(String.self, forKey: .customerName)
         customerPhone = try? altContainer.decodeIfPresent(String.self, forKey: .customerPhone)
+        driverName = (try? container.decodeIfPresent(String.self, forKey: .driverName))
+            ?? (try? altContainer.decodeIfPresent(String.self, forKey: .driverName))
         driverId = (try? altContainer.decodeIfPresent(String.self, forKey: .driverId))
             ?? (try? container.decodeIfPresent(String.self, forKey: .driverId))
         driverLocation = (try? altContainer.decodeIfPresent(String.self, forKey: .driverLocation))
@@ -237,6 +250,20 @@ struct Order: Codable, Identifiable {
     var storeCoordinate: (latitude: Double, longitude: Double)? {
         guard let storeLatitude, let storeLongitude else { return nil }
         return (storeLatitude, storeLongitude)
+    }
+
+    // Computed property to build a full URL for the store icon
+    var storeIconFullUrl: String? {
+        guard let iconUrl = storeIconUrl, !iconUrl.isEmpty else { return nil }
+
+        // Use first base candidate and remove API prefix if present
+        let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+        let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
+
+        if iconUrl.starts(with: "http") {
+            return iconUrl.contains("localhost:3000") ? iconUrl.replacingOccurrences(of: "http://localhost:3000", with: cleanBase) : iconUrl
+        }
+        return cleanBase + (iconUrl.starts(with: "/") ? iconUrl : "/" + iconUrl)
     }
     
     static let mock = Order(

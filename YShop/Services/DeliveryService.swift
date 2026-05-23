@@ -191,6 +191,8 @@ class DeliveryService {
                 let shipping_address: String?
                 let driver_id: String?
                 let store_name: String?
+                let store_icon_url: String?
+                let storeIconUrl: String?
                 let store_latitude: FlexDouble?
                 let store_longitude: FlexDouble?
                 let location_Latitude: FlexDouble?
@@ -252,6 +254,8 @@ class DeliveryService {
             "total_price": d.total_price.value,
             "status": d.status ?? "confirmed",
             "store_name": d.store_name ?? "Store",
+            "store_icon_url": d.store_icon_url ?? "",
+            "storeIconUrl": d.storeIconUrl ?? "",
             "shipping_address": d.shipping_address ?? "",
             "driver_id": d.driver_id ?? "",
             "driverId": d.driver_id ?? "",
@@ -259,6 +263,8 @@ class DeliveryService {
             "store_longitude": d.store_longitude?.value ?? 0,
             "location_Latitude": d.location_Latitude?.value ?? 0,
             "location_Longitude": d.location_Longitude?.value ?? 0,
+            "customerName": d.customerName ?? "",
+            "customerPhone": d.customerPhone ?? "",
             "customer_name": d.customerName ?? "",
             "customer_phone": d.customerPhone ?? ""
         ]

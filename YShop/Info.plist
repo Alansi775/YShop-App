@@ -13,5 +13,7 @@
 	<string>YSHOP needs your location to set your delivery address</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>YSHOP needs your location for delivery tracking</string>
+	<key>NSCameraUsageDescription</key>
+	<string>YSHOP needs camera access to scan the store QR code for pickup verification</string>
 </dict>
 </plist>

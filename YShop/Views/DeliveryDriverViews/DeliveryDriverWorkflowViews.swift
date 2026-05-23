@@ -504,9 +504,22 @@ struct DeliveryNavigationView: View {
         VStack(alignment: .leading, spacing: 10) {
             // Header: Store + Price
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10).fill(DeliveryTheme.accentOrange.opacity(0.15)).frame(width: 44, height: 44)
-                    Image(systemName: "storefront.fill").font(.system(size: 18)).foregroundColor(DeliveryTheme.accentOrange)
+                if let iconUrl = order.storeIconFullUrl, let url = URL(string: iconUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                                .frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: 10))
+                        default:
+                            RoundedRectangle(cornerRadius: 10).fill(DeliveryTheme.accentOrange.opacity(0.15)).frame(width: 44, height: 44)
+                                .overlay(Image(systemName: "storefront.fill").foregroundColor(DeliveryTheme.accentOrange))
+                        }
+                    }
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10).fill(DeliveryTheme.accentOrange.opacity(0.15)).frame(width: 44, height: 44)
+                        Image(systemName: "storefront.fill").font(.system(size: 18)).foregroundColor(DeliveryTheme.accentOrange)
+                    }
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(order.storeName ?? "Store").font(.system(size: 15, weight: .bold)).foregroundColor(DeliveryTheme.primaryText)
@@ -525,6 +538,23 @@ struct DeliveryNavigationView: View {
             if !order.items.isEmpty {
                 ForEach(order.items.prefix(3)) { item in
                     HStack(spacing: 8) {
+                        // Thumbnail
+                        if let urlString = item.fullImageUrl, let url = URL(string: urlString) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image.resizable().scaledToFill()
+                                        .frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: 8))
+                                default:
+                                    RoundedRectangle(cornerRadius: 8).fill(DeliveryTheme.cardBackground).frame(width: 44, height: 44)
+                                        .overlay(Image(systemName: "photo").foregroundColor(DeliveryTheme.secondaryText))
+                                }
+                            }
+                        } else {
+                            RoundedRectangle(cornerRadius: 8).fill(DeliveryTheme.cardBackground).frame(width: 44, height: 44)
+                                .overlay(Image(systemName: "photo").foregroundColor(DeliveryTheme.secondaryText))
+                        }
+
                         Text("×\(item.quantity)").font(.system(size: 12, weight: .bold)).foregroundColor(DeliveryTheme.accentBlue).frame(width: 24)
                         Text(item.displayName).font(.system(size: 13)).foregroundColor(DeliveryTheme.primaryText).lineLimit(1)
                         Spacer()
