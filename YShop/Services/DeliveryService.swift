@@ -361,8 +361,9 @@ class DeliveryService {
     
 
     // MARK: - Pickup Order
-    static func pickupOrder(orderId: String) async throws -> EmptyResponse {
-        try await APIClient.shared.request(.pickupOrder(orderId))
+    static func pickupOrder(orderId: String) async throws -> Order {
+        let response: APIResponse<Order> = try await APIClient.shared.request(.pickupOrder(orderId))
+        return response.data
     }
 
     // MARK: - Update Delivery Location
@@ -383,7 +384,17 @@ class DeliveryService {
 
     // MARK: - Get Delivery History
     static func getDeliveryHistory(page: Int = 1) async throws -> [Order] {
-        try await APIClient.shared.request(.getDeliveryHistory)
+        struct RawHistoryResponse: Decodable {
+            let success: Bool
+            let data: HistoryData?
+
+            struct HistoryData: Decodable {
+                let orders: [Order]?
+            }
+        }
+
+        let raw: RawHistoryResponse = try await APIClient.shared.request(.getDeliveryHistory)
+        return raw.data?.orders ?? []
     }
 
     // MARK: - Get Driver Stats

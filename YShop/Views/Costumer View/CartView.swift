@@ -20,6 +20,16 @@ struct CartView: View {
         subtotal
     }
 
+    private var cartCurrencySymbol: String {
+        cartManager.cartItems.first?.currencySymbol
+            ?? cartManager.cartItems.first?.product?.currencySymbol
+            ?? "₺"
+    }
+
+    private func formattedTotal(_ amount: Double) -> String {
+        "\(cartCurrencySymbol)\(String(format: "%.2f", amount))"
+    }
+
     private var backgroundColor: Color {
         colorScheme == .dark ? Color(red: 0.04, green: 0.04, blue: 0.05) : Color(.systemGroupedBackground)
     }
@@ -139,7 +149,7 @@ struct CartView: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(Color(.secondaryLabel))
                     
-                    Text("\(cartManager.cartItems.first?.product?.currency ?? "$") \(String(format: "%.2f", total))")
+                    Text(formattedTotal(total))
                         .font(.system(size: 24, weight: .black))
                         .foregroundColor(Color(.label))
                 }

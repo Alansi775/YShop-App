@@ -338,6 +338,7 @@ class APIClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = endpoint.method.rawValue
         urlRequest.timeoutInterval = requestTimeout
+        urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
 
         // Add headers
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")

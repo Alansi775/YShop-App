@@ -56,6 +56,7 @@ struct Order: Codable, Identifiable {
     let driverName: String?
     let driverId: String?
     let driverLocation: String?
+    let paymentMethod: String?
     let pickedUpAt: String?
     let deliveredAt: String?
     let shippingAddress: String?
@@ -83,6 +84,7 @@ struct Order: Codable, Identifiable {
         driverName: String? = nil,
         driverId: String?,
         driverLocation: String?,
+        paymentMethod: String? = nil,
         pickedUpAt: String?,
         deliveredAt: String?,
         shippingAddress: String?,
@@ -109,6 +111,7 @@ struct Order: Codable, Identifiable {
         self.driverName = driverName
         self.driverId = driverId
         self.driverLocation = driverLocation
+        self.paymentMethod = paymentMethod
         self.pickedUpAt = pickedUpAt
         self.deliveredAt = deliveredAt
         self.shippingAddress = shippingAddress
@@ -134,6 +137,7 @@ struct Order: Codable, Identifiable {
         case driverName = "driver_name"
         case driverId
         case driverLocation
+        case paymentMethod = "payment_method"
         case pickedUpAt = "picked_up_at"
         case deliveredAt = "delivered_at"
         case createdAt = "created_at"
@@ -155,6 +159,7 @@ struct Order: Codable, Identifiable {
         case driverName
         case driverId = "driverId"
         case driverLocation = "driver_location"
+        case paymentMethod = "payment_method"
         case pickedUpAt = "picked_up_at"
         case deliveredAt = "delivered_at"
         case customerLatitude = "location_Latitude"
@@ -231,8 +236,20 @@ struct Order: Codable, Identifiable {
             ?? (try? altContainer.decodeIfPresent(String.self, forKey: .driverName))
         driverId = (try? altContainer.decodeIfPresent(String.self, forKey: .driverId))
             ?? (try? container.decodeIfPresent(String.self, forKey: .driverId))
-        driverLocation = (try? altContainer.decodeIfPresent(String.self, forKey: .driverLocation))
-            ?? (try? container.decodeIfPresent(String.self, forKey: .driverLocation))
+
+        if let rawLocation = (try? altContainer.decodeIfPresent(String.self, forKey: .driverLocation))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .driverLocation)) {
+            driverLocation = rawLocation
+        } else if let payload = (try? altContainer.decodeIfPresent(DriverLocationPayload.self, forKey: .driverLocation))
+            ?? (try? container.decodeIfPresent(DriverLocationPayload.self, forKey: .driverLocation)) {
+            driverLocation = payload.asCoordinateString
+        } else {
+            driverLocation = nil
+        }
+
+        paymentMethod = (try? container.decodeIfPresent(String.self, forKey: .paymentMethod))
+            ?? (try? altContainer.decodeIfPresent(String.self, forKey: .paymentMethod))
+
         pickedUpAt = (try? altContainer.decodeIfPresent(String.self, forKey: .pickedUpAt))
             ?? (try? container.decodeIfPresent(String.self, forKey: .pickedUpAt))
         deliveredAt = (try? altContainer.decodeIfPresent(String.self, forKey: .deliveredAt))
@@ -259,7 +276,7 @@ struct Order: Codable, Identifiable {
         guard let iconUrl = storeIconUrl, !iconUrl.isEmpty else { return nil }
 
         // Use first base candidate and remove API prefix if present
-        let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+        let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.80:3000"
         let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
 
         if iconUrl.starts(with: "http") {
@@ -285,6 +302,7 @@ struct Order: Codable, Identifiable {
         customerPhone: nil,
         driverId: nil,
         driverLocation: nil,
+        paymentMethod: nil,
         pickedUpAt: nil,
         deliveredAt: nil,
         shippingAddress: nil,
@@ -293,6 +311,30 @@ struct Order: Codable, Identifiable {
         storeLatitude: nil,
         storeLongitude: nil
     )
+}
+
+private struct DriverLocationPayload: Decodable {
+    let latitude: Double?
+    let longitude: Double?
+    let lat: Double?
+    let lng: Double?
+    let coordinates: [Double]?
+
+    var asCoordinateString: String? {
+        if let latitude, let longitude {
+            return "\(latitude),\(longitude)"
+        }
+
+        if let lat, let lng {
+            return "\(lat),\(lng)"
+        }
+
+        if let coordinates, coordinates.count >= 2 {
+            return "\(coordinates[0]),\(coordinates[1])"
+        }
+
+        return nil
+    }
 }
 
 private extension Order {

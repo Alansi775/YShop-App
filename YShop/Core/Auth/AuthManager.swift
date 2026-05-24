@@ -84,8 +84,11 @@ struct SimpleUser: Codable, Equatable {
         case latitude
         case longitude
         case buildingInfo = "building_info"
+        case buildingInfoAlt = "buildingInfo"
         case apartmentNumber = "apartment_number"
+        case apartmentNumberAlt = "apartmentNumber"
         case deliveryInstructions = "delivery_instructions"
+        case deliveryInstructionsAlt = "deliveryInstructions"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -132,9 +135,12 @@ struct SimpleUser: Codable, Equatable {
             longitude = nil
         }
         
-        buildingInfo = try? container.decodeIfPresent(String.self, forKey: .buildingInfo)
-        apartmentNumber = try? container.decodeIfPresent(String.self, forKey: .apartmentNumber)
-        deliveryInstructions = try? container.decodeIfPresent(String.self, forKey: .deliveryInstructions)
+        buildingInfo = (try? container.decodeIfPresent(String.self, forKey: .buildingInfo))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .buildingInfoAlt))
+        apartmentNumber = (try? container.decodeIfPresent(String.self, forKey: .apartmentNumber))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .apartmentNumberAlt))
+        deliveryInstructions = (try? container.decodeIfPresent(String.self, forKey: .deliveryInstructions))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .deliveryInstructionsAlt))
         createdAt = try? container.decode(String.self, forKey: .createdAt)
         updatedAt = try? container.decode(String.self, forKey: .updatedAt)
     }

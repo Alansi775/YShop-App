@@ -25,6 +25,7 @@ struct CheckoutView: View {
     @State private var storeDetails: [String: Store] = [:]
     @State private var storesLoaded = false
     @State private var deliveryTimesUpdated = 0 // Trigger for view refresh
+    @State private var prefillingUserId: String?
 
     init(onOrderPlaced: ((String) -> Void)? = nil) {
         self.onOrderPlaced = onOrderPlaced
@@ -49,30 +50,30 @@ struct CheckoutView: View {
     }
     
     private func calculateDeliveryTime(for storeId: String, option: String) -> String {
-        print("10.155.83.72 [DELIVERY TIME] Checking conditions - storesLoaded: \(storesLoaded), storeId: \(storeId)")
+        print("192.168.1.80 [DELIVERY TIME] Checking conditions - storesLoaded: \(storesLoaded), storeId: \(storeId)")
         guard storesLoaded else { 
-            print("10.155.83.72 [DELIVERY TIME] Stores not loaded yet")
+            print("192.168.1.80 [DELIVERY TIME] Stores not loaded yet")
             return "N/A" 
         }
         
-        print("10.155.83.72 [DELIVERY TIME] Store details count: \(storeDetails.count)")
+        print("192.168.1.80 [DELIVERY TIME] Store details count: \(storeDetails.count)")
         guard let store = storeDetails[storeId] else { 
-            print("10.155.83.72 [DELIVERY TIME] Store not found in storeDetails for id: \(storeId)")
+            print("192.168.1.80 [DELIVERY TIME] Store not found in storeDetails for id: \(storeId)")
             return "N/A" 
         }
         
-        print("10.155.83.72 [DELIVERY TIME] Selected location: (\(selectedLatitude), \(selectedLongitude))")
+        print("192.168.1.80 [DELIVERY TIME] Selected location: (\(selectedLatitude), \(selectedLongitude))")
         guard selectedLatitude != 0, selectedLongitude != 0 else { 
-            print("10.155.83.72 [DELIVERY TIME] Location not set")
+            print("192.168.1.80 [DELIVERY TIME] Location not set")
             return "N/A" 
         }
         
         guard let storeLat = store.latitude, let storeLon = store.longitude else {
-            print("10.155.83.72 [DELIVERY TIME] Store coordinates missing")
+            print("192.168.1.80 [DELIVERY TIME] Store coordinates missing")
             return "N/A"
         }
         
-        print("10.155.83.72 [DELIVERY TIME] Store location: (\(storeLat), \(storeLon)), Type: \(store.storeType ?? "unknown")")
+        print("192.168.1.80 [DELIVERY TIME] Store location: (\(storeLat), \(storeLon)), Type: \(store.storeType ?? "unknown")")
         
         let storeType = store.storeType?.lowercased() ?? ""
         let isFoodRelated = storeType.contains("food") || storeType.contains("pharmacy") || storeType.contains("market")
@@ -86,16 +87,16 @@ struct CheckoutView: View {
                     lat2: selectedLatitude,
                     lon2: selectedLongitude
                 )
-                print("10.155.83.72 [DELIVERY TIME] Distance: \(distance) km")
+                print("192.168.1.80 [DELIVERY TIME] Distance: \(distance) km")
                 // المسافة بالكيلومتر، تقريباً 1 كم = 5 دقائق + 15 دقيقة ثابتة
                 let travelTime = Int(distance * 5) + 25
                 let minTime = max(10, travelTime)
                 let maxTime = minTime + 5
-                print("10.155.83.72 [DELIVERY TIME] Standard Delivery: \(minTime)-\(maxTime) Mins")
+                print("192.168.1.80 [DELIVERY TIME] Standard Delivery: \(minTime)-\(maxTime) Mins")
                 return "\(minTime)-\(maxTime) Mins"
             } else {
                 // ملابس ومنتجات أخرى
-                print("10.155.83.72 [DELIVERY TIME] Non-food item: 1-2 Days")
+                print("192.168.1.80 [DELIVERY TIME] Non-food item: 1-2 Days")
                 return "1-2 Days"
             }
         } else if option == "Drone" {
@@ -110,7 +111,7 @@ struct CheckoutView: View {
             let droneTime = Int(distance * 2) + 13
             let minTime = max(5, droneTime)
             let maxTime = minTime + 5
-            print("10.155.83.72 [DELIVERY TIME] Drone Delivery: \(minTime)-\(maxTime) Mins")
+            print("192.168.1.80 [DELIVERY TIME] Drone Delivery: \(minTime)-\(maxTime) Mins")
             return "\(minTime)-\(maxTime) Mins"
         }
         
@@ -468,7 +469,7 @@ struct CheckoutView: View {
             VStack(spacing: 14) {
                 summaryRow(title: "Items", value: "\(cartManager.itemCount)")
                 Divider()
-                summaryRow(title: "Subtotal", value: String(format: "%.2f", cartManager.totalPrice))
+                summaryRow(title: "Subtotal", value: formattedCheckoutAmount(cartManager.totalPrice))
                 summaryRow(title: "Delivery", value: "Free")
                 
                 Divider().padding(.vertical, 4)
@@ -477,7 +478,7 @@ struct CheckoutView: View {
                     Text("Grand Total")
                         .font(.system(size: 16, weight: .bold))
                     Spacer()
-                    Text(String(format: "%.2f", cartManager.totalPrice))
+                    Text(formattedCheckoutAmount(cartManager.totalPrice))
                         .font(.system(size: 17, weight: .bold))
                         .foregroundColor(.blue)
                 }
@@ -495,6 +496,14 @@ struct CheckoutView: View {
                 .font(.system(size: 14, weight: .regular))
                 .foregroundColor(Color(.label))
         }
+    }
+
+    private var checkoutCurrencySymbol: String {
+        cartManager.cartItems.first?.currencySymbol ?? cartManager.cartItems.first?.product?.currencySymbol ?? "₺"
+    }
+
+    private func formattedCheckoutAmount(_ amount: Double) -> String {
+        "\(checkoutCurrencySymbol)\(String(format: "%.2f", amount))"
     }
 
     // MARK: - Custom Section Card View
@@ -691,21 +700,26 @@ struct CheckoutView: View {
             print("❌ [DELIVERY] User not found in authManager")
             return 
         }
+
+        if prefillingUserId == user.id {
+            return
+        }
         
         print("📋 [DELIVERY] User from authManager - Lat: \(user.latitude ?? 0), Lng: \(user.longitude ?? 0)")
         
-        if selectedAddress.isEmpty { selectedAddress = user.address ?? "" }
-        if selectedLatitude == 0, let lat = user.latitude { 
+        selectedAddress = user.address ?? selectedAddress
+        if let lat = user.latitude {
             selectedLatitude = lat
             print("✅ [DELIVERY] Set selectedLatitude to \(lat)")
         }
-        if selectedLongitude == 0, let lng = user.longitude { 
+        if let lng = user.longitude {
             selectedLongitude = lng
             print("✅ [DELIVERY] Set selectedLongitude to \(lng)")
         }
-        if buildingInfo.isEmpty { buildingInfo = user.buildingInfo ?? "" }
-        if apartmentNumber.isEmpty { apartmentNumber = user.apartmentNumber ?? "" }
-        if notes.isEmpty { notes = user.deliveryInstructions ?? "" }
+        buildingInfo = user.buildingInfo ?? buildingInfo
+        apartmentNumber = user.apartmentNumber ?? apartmentNumber
+        notes = user.deliveryInstructions ?? notes
+        prefillingUserId = user.id
         
         print("✅ [DELIVERY] Profile prefilled - Final Lat: \(selectedLatitude), Lng: \(selectedLongitude), Address: \(selectedAddress)")
     }

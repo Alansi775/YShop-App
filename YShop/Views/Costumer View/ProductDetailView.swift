@@ -300,14 +300,14 @@ struct ProductDetailView: View {
 
         if trimmed.starts(with: "http") {
             if trimmed.contains("localhost:3000") {
-                let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+                let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.80:3000"
                 let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
                 return trimmed.replacingOccurrences(of: "http://localhost:3000", with: cleanBase)
             }
             return trimmed
         }
 
-        let baseHost = AppConstants.baseURLCandidates.first ?? "http://10.155.83.72:3000"
+        let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.80:3000"
         let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
         return cleanBase + trimmed
     }

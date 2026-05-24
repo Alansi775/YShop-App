@@ -19,6 +19,7 @@ class SocketService: NSObject, ObservableObject {
     private var urlSession: URLSessionWebSocketTask?
     private var currentToken: String?
     private var orderObservers: [String: [UUID: () -> Void]] = [:]
+    private var locationObservers: [String: [UUID: (String) -> Void]] = [:]
     private let baseURL: String = AppConstants.baseURL.replacingOccurrences(of: "http", with: "ws")
 
     override private init() {
@@ -77,6 +78,24 @@ class SocketService: NSObject, ObservableObject {
         }
     }
 
+    func observeLocation(orderId: String, onUpdate: @escaping (String) -> Void) -> UUID {
+        let observerId = UUID()
+        var observers = locationObservers[orderId] ?? [:]
+        observers[observerId] = onUpdate
+        locationObservers[orderId] = observers
+        return observerId
+    }
+
+    func removeLocationObserver(orderId: String, observerId: UUID) {
+        guard var observers = locationObservers[orderId] else { return }
+        observers.removeValue(forKey: observerId)
+        if observers.isEmpty {
+            locationObservers.removeValue(forKey: orderId)
+        } else {
+            locationObservers[orderId] = observers
+        }
+    }
+
     // MARK: - Send Message
     func send(_ message: String) {
         let message = URLSessionWebSocketTask.Message.string(message)
@@ -130,6 +149,13 @@ class SocketService: NSObject, ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
 
         if let envelope = try? decoder.decode(SocketMessageEnvelope.self, from: data) {
+            if let type = envelope.type, type == "driver_location",
+               let orderId = envelope.orderId ?? envelope.id ?? envelope.orderID,
+               let driverLoc = envelope.driverLocation {
+                notifyLocationObservers(for: orderId, location: driverLoc)
+                return
+            }
+
             if let order = envelope.order ?? envelope.data ?? envelope.payload {
                 notifyOrderObservers(for: order.id)
                 return
@@ -147,10 +173,29 @@ class SocketService: NSObject, ObservableObject {
     }
 
     private func notifyOrderObservers(for orderId: String) {
-        guard let observers = orderObservers[orderId], !observers.isEmpty else { return }
+        // Normalize incoming id and notify any observers whose normalized id matches.
+        let incoming = normalizeOrderId(orderId)
+
+        for (key, observers) in orderObservers {
+            if normalizeOrderId(key) == incoming {
+                for callback in observers.values {
+                    callback()
+                }
+            }
+        }
+    }
+
+    private func normalizeOrderId(_ id: String) -> String {
+        // Keep only digits for loose equality (e.g. "ORDER-123" == "123")
+        let digits = id.compactMap { $0.isNumber ? String($0) : nil }.joined()
+        return digits.isEmpty ? id : digits
+    }
+
+    private func notifyLocationObservers(for orderId: String, location: String) {
+        guard let observers = locationObservers[orderId], !observers.isEmpty else { return }
 
         for callback in observers.values {
-            callback()
+            callback(location)
         }
     }
 
@@ -171,6 +216,7 @@ private struct SocketMessageEnvelope: Decodable {
     let type: String?
     let event: String?
     let action: String?
+    let driverLocation: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -182,5 +228,6 @@ private struct SocketMessageEnvelope: Decodable {
         case type
         case event
         case action
+        case driverLocation = "driver_location"
     }
 }

@@ -1,20 +1,7 @@
 import SwiftUI
 import CoreLocation
 
-// MARK: - Brand Colors
 
-enum DeliveryTheme {
-    static let darkBackground = Color(.systemBackground)
-    static let cardBackground = Color(.secondarySystemBackground)
-    static let primaryText = Color(.label)
-    static let secondaryText = Color(.secondaryLabel)
-    static let accentBlue = Color(red: 0.16, green: 0.47, blue: 1.0)
-    static let accentGreen = Color(red: 0.0, green: 0.90, blue: 0.46)
-    static let accentRed = Color(red: 1.0, green: 0.32, blue: 0.32)
-    static let accentOrange = Color(red: 1.0, green: 0.60, blue: 0.0)
-    static let separator = Color(.separator)
-    static let routeBlue = Color(red: 0.0, green: 0.48, blue: 1.0)
-}
 
 // MARK: - Delivery Home View
 
@@ -44,7 +31,7 @@ struct DeliveryHomeView: View {
         NavigationStack {
             ZStack {
                 DeliveryTheme.darkBackground.ignoresSafeArea()
-
+                
                 if isLoading && driverProfile == nil {
                     ProgressView()
                         .tint(DeliveryTheme.accentBlue)
@@ -68,7 +55,7 @@ struct DeliveryHomeView: View {
                             .foregroundColor(DeliveryTheme.accentBlue)
                     }
                 }
-
+                
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showProfileSheet = true
@@ -105,12 +92,24 @@ struct DeliveryHomeView: View {
             .fullScreenCover(item: $journeyOrder, onDismiss: {
                 journeyOrder = nil
             }) { order in
-                DeliveryNavigationView(order: order) {
+                DeliveryNavigationView(order: order, onComplete: {
                     activeOrder = nil
                     journeyOrder = nil
                     Task { await loadDriverStatus() }
+                }, onPickupConfirmed: { updatedOrder in
+                    activeOrder = updatedOrder
+                    journeyOrder = updatedOrder
+                    storedActiveOrderId = updatedOrder.id
+                }, onDeliveredConfirmed: {
+                    // Stop observing the old order to avoid socket re-populating it
+                    stopOrderSocketObserver()
+                    activeOrder = nil
+                    journeyOrder = nil
+                    storedActiveOrderId = ""
                 }
-            }
+            )
+        }
+        
             .task {
                 await loadDriverStatus()
             }
@@ -432,8 +431,7 @@ struct DeliveryHomeView: View {
                 isLoading = false
             }
 
-            // فقط checkActiveOrder — بدون restore
-            await checkActiveOrder()
+            await refreshActiveOrderState()
 
             if profile.isWorking && profile.isApproved {
                 startLocationTracking()
@@ -463,13 +461,36 @@ struct DeliveryHomeView: View {
     }
 
     private func checkActiveOrder() async {
+        await refreshActiveOrderState()
+    }
+
+    private func refreshActiveOrderState() async {
         do {
             print("🔍 Checking active order...")
+
+            if !storedActiveOrderId.isEmpty {
+                do {
+                    let storedOrder = try await OrderService.getOrderDetail(id: storedActiveOrderId)
+                    if storedOrder.status.isTrackable {
+                        print("✅ Restored active order from stored id: \(storedOrder.id)")
+                        await MainActor.run {
+                            activeOrder = storedOrder
+                            journeyOrder = storedOrder
+                        }
+                        startOrderSocketObserver(orderId: storedOrder.id)
+                        return
+                    }
+                } catch {
+                    print("⚠️ Stored active order restore failed: \(error)")
+                }
+            }
+
             let order = try await DeliveryService.getActiveOrder()
             if let order = order {
                 print("✅ Active order found: \(order.id)")
                 await MainActor.run {
                     activeOrder = order
+                    journeyOrder = order
                     storedActiveOrderId = order.id
                 }
                 startOrderSocketObserver(orderId: order.id)
@@ -490,42 +511,32 @@ struct DeliveryHomeView: View {
     }
 
     private func startOrderSocketObserver(orderId: String) {
-    // امسح القديم أول
-    stopOrderSocketObserver()
-    
-    if let token = authManager.token {
-        SocketService.shared.connectIfNeeded(token: token)
-    }
-    
-    socketObserverId = SocketService.shared.observeOrder(orderId: orderId) {
-        Task {
-            // جاء تحديث من الـ server — تحقق من الـ order
-            guard let updatedOrder = try? await OrderService.getOrderDetail(id: orderId) else {
-                // الطلب ما موجود → امسح
-                await MainActor.run {
-                    self.activeOrder = nil
-                    self.journeyOrder = nil
-                    self.storedActiveOrderId = ""
-                    self.startOfferPolling()
-                }
-                return
-            }
-            
-            if updatedOrder.status.isTerminal || updatedOrder.driverId == nil {
-                await MainActor.run {
-                    self.activeOrder = nil
-                    self.journeyOrder = nil
-                    self.storedActiveOrderId = ""
-                    self.startOfferPolling()
-                }
-            } else {
-                await MainActor.run {
-                    self.activeOrder = updatedOrder
+        // امسح القديم أول
+        stopOrderSocketObserver()
+        
+        if let token = authManager.token {
+            SocketService.shared.connectIfNeeded(token: token)
+        }
+        
+        socketObserverId = SocketService.shared.observeOrder(orderId: orderId) {
+            Task {
+                // جاء تحديث من الـ server — تحقق من الـ order من واجهة السائق
+                if let updatedOrder = try? await DeliveryService.getActiveOrder(), updatedOrder.id == orderId {
+                    await MainActor.run {
+                        self.activeOrder = updatedOrder
+                    }
+                } else {
+                    // لا يوجد طلب نشط أو طلب مختلف → اعتبره انتهى
+                    await MainActor.run {
+                        self.activeOrder = nil
+                        self.journeyOrder = nil
+                        self.storedActiveOrderId = ""
+                        self.startOfferPolling()
+                    }
                 }
             }
         }
     }
-}
 
 private func stopOrderSocketObserver() {
     if let id = socketObserverId, let orderId = activeOrder?.id {
@@ -684,3 +695,4 @@ private func stopOrderSocketObserver() {
         .environmentObject(AuthManager.shared)
         .environmentObject(LocationManager())
 }
+

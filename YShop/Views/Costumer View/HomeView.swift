@@ -18,6 +18,8 @@ struct HomeView: View {
     @State private var heroTimer: Timer?
     @State private var isAIExpanded = false
     @State private var showProfileSheet = false
+    @State private var showMyOrdersSheet = false
+    @State private var shouldPresentMyOrdersAfterProfileDismiss = false
     @State private var showCartSheet = false
     @State private var scrollOffset: CGFloat = 0
     @State private var selectedCategory: String = ""
@@ -282,8 +284,26 @@ struct HomeView: View {
                     scrollOffset = 0
                 }
         )
-        .sheet(isPresented: $showProfileSheet) {
-            ProfileSheetView(isPresented: $showProfileSheet)
+        .sheet(isPresented: $showProfileSheet, onDismiss: {
+            if shouldPresentMyOrdersAfterProfileDismiss {
+                shouldPresentMyOrdersAfterProfileDismiss = false
+                showMyOrdersSheet = true
+            }
+        }) {
+            ProfileSheetView(
+                isPresented: $showProfileSheet,
+                onMyOrders: {
+                    shouldPresentMyOrdersAfterProfileDismiss = true
+                    showProfileSheet = false
+                }
+            )
+        }
+        .sheet(isPresented: $showMyOrdersSheet) {
+            NavigationStack {
+                MyOrdersView()
+                    .environmentObject(authManager)
+                    .environmentObject(cartManager)
+            }
         }
         .sheet(isPresented: $showCartSheet) {
             CartView(showsCloseButton: true)
@@ -341,6 +361,7 @@ extension View {
 struct ProfileSheetView: View {
     @EnvironmentObject var authManager: AuthManager
     @Binding var isPresented: Bool
+    let onMyOrders: () -> Void
     
     var body: some View {
         VStack(spacing: 20) {
@@ -379,7 +400,10 @@ struct ProfileSheetView: View {
             VStack(spacing: 12) {
                 ProfileOptionRow(icon: "person", title: "My Profile")
                 ProfileOptionRow(icon: "heart", title: "Saved Items")
-                ProfileOptionRow(icon: "mappin", title: "Addresses")
+                Button(action: onMyOrders) {
+                    ProfileOptionRow(icon: "bag.fill", title: "My Orders")
+                }
+                .buttonStyle(.plain)
                 ProfileOptionRow(icon: "creditcard", title: "Payment Methods")
                 ProfileOptionRow(icon: "questionmark.circle", title: "Help & Support")
             }

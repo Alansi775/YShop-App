@@ -7,16 +7,23 @@ struct OrderTrackingView: View {
     @EnvironmentObject private var authManager: AuthManager
     @EnvironmentObject private var cartManager: CartManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var order: Order?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var lastRefreshedAt: Date?
     @State private var socketObserverId: UUID?
+    @State private var locationObserverId: UUID?
     @State private var store: Store?
     @State private var mapPosition: MapCameraPosition = .automatic
     @State private var selectedProduct: Product?
     @State private var routeCoordinates: [CLLocationCoordinate2D] = []
+    @State private var liveDriverLocation: String?
+    @State private var liveETA: String?
+    @State private var liveDistanceMeters: Double = 0
+    @State private var periodicRefreshTask: Task<Void, Never>?
+    @State private var allowAutoMapUpdates = true
 
     var body: some View {
         ZStack {
@@ -72,10 +79,11 @@ struct OrderTrackingView: View {
         do {
             let loadedOrder = try await OrderService.getOrderDetail(id: orderId)
             order = loadedOrder
+            liveDriverLocation = loadedOrder.driverLocation
             lastRefreshedAt = Date()
             cartManager.setActiveTrackingOrder(loadedOrder)
             await loadStoreDetails(storeId: loadedOrder.storeId)
-            await updateRoutePolyline(for: loadedOrder)
+            await updateRoutePolyline(for: loadedOrder, driverLocation: liveDriverLocation)
         } catch {
             errorMessage = error.localizedDescription
             order = nil
@@ -88,6 +96,7 @@ struct OrderTrackingView: View {
     private func refreshOrder() async {
         do {
             let loadedOrder = try await OrderService.getOrderDetail(id: orderId)
+            liveDriverLocation = loadedOrder.driverLocation ?? liveDriverLocation
 
             if order?.status != loadedOrder.status || order?.updatedAt != loadedOrder.updatedAt {
                 withAnimation(.easeInOut(duration: 0.25)) {
@@ -101,7 +110,7 @@ struct OrderTrackingView: View {
             errorMessage = nil
             cartManager.setActiveTrackingOrder(loadedOrder)
             await loadStoreDetails(storeId: loadedOrder.storeId)
-            await updateRoutePolyline(for: loadedOrder)
+            await updateRoutePolyline(for: loadedOrder, driverLocation: liveDriverLocation)
 
             if loadedOrder.status.isTerminal {
                 stopTrackingSession()
@@ -124,13 +133,18 @@ struct OrderTrackingView: View {
                 await refreshOrderFromSocket(orderId: orderId)
             }
         }
+
+        locationObserverId = SocketService.shared.observeLocation(orderId: orderId) { [orderId] driverLocation in
+            Task {
+                await refreshDriverLocationFromSocket(orderId: orderId, driverLocation: driverLocation)
+            }
+        }
+
+        startPeriodicFallbackRefresh()
     }
 
     private func loadStoreDetails(storeId: String) async {
-        guard store?.id != Int(storeId) else {
-            updateMapPosition()
-            return
-        }
+        guard store?.id != Int(storeId) else { return }
 
         do {
             store = try await StoreService.getStoreDetail(id: storeId)
@@ -151,10 +165,42 @@ struct OrderTrackingView: View {
         }
     }
 
+    private func refreshDriverLocationFromSocket(orderId: String, driverLocation: String) async {
+        guard orderId == self.orderId else { return }
+
+        liveDriverLocation = driverLocation
+        lastRefreshedAt = Date()
+
+        guard let currentOrder = order else { return }
+        await updateRoutePolyline(for: currentOrder, driverLocation: driverLocation)
+        updateMapPosition()
+    }
+
     private func stopTrackingSession() {
+        periodicRefreshTask?.cancel()
+        periodicRefreshTask = nil
+
         if let socketObserverId {
             SocketService.shared.removeObserver(orderId: orderId, observerId: socketObserverId)
             self.socketObserverId = nil
+        }
+
+        if let locationObserverId {
+            SocketService.shared.removeLocationObserver(orderId: orderId, observerId: locationObserverId)
+            self.locationObserverId = nil
+        }
+    }
+
+    private func startPeriodicFallbackRefresh() {
+        periodicRefreshTask?.cancel()
+        periodicRefreshTask = Task {
+            while !Task.isCancelled {
+                let delayNanos: UInt64 = SocketService.shared.isConnected ? 8_000_000_000 : 3_000_000_000
+                try? await Task.sleep(nanoseconds: delayNanos)
+                guard !Task.isCancelled else { return }
+
+                await refreshOrder()
+            }
         }
     }
 
@@ -286,20 +332,32 @@ struct OrderTrackingView: View {
 
     private func shouldShowDriverMap(_ order: Order) -> Bool {
         guard order.pickedUpAt != nil || order.status == .outForDelivery else { return false }
-        return customerCoordinate(for: order) != nil && storeCoordinate(for: order) != nil
+        return coordinate(from: liveDriverLocation ?? order.driverLocation) != nil
     }
 
     private func driverMapSection(_ order: Order) -> some View {
-        let storeCoordinate = storeCoordinate(for: order)
-        let customerCoordinate = customerCoordinate(for: order)
-        let driverCoordinate = coordinate(from: order.driverLocation)
+        let driverCoordinate = coordinate(from: liveDriverLocation ?? order.driverLocation)
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Live Driver")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color(.label))
+                    HStack(spacing: 8) {
+                        Text("Live Driver")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(Color(.label))
+
+                        if let eta = liveETA {
+                            Text("• " + eta)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(Color(.secondaryLabel))
+                        }
+
+                        if liveDistanceMeters > 0 {
+                            Text("• " + (liveDistanceMeters < 1000 ? "\(Int(liveDistanceMeters))m" : String(format: "%.1fkm", liveDistanceMeters / 1000)))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(Color(.secondaryLabel))
+                        }
+                    }
 
                     Text(driverCoordinate == nil ? "Waiting for the courier to share live location" : "Courier is live on the map")
                         .font(.system(size: 12, weight: .regular))
@@ -308,29 +366,38 @@ struct OrderTrackingView: View {
             }
 
             Map(position: $mapPosition) {
-                if let storeCoordinate {
-                    Annotation("Store", coordinate: storeCoordinate) {
-                        mapPin(label: "S", color: .black)
+                // Store annotation
+                if let storeCoord = storeCoordinate(for: order) {
+                    Annotation("Store", coordinate: storeCoord) {
+                        mapPin(label: "S", color: .orange)
                     }
                 }
 
+                // Customer annotation
+                if let customerCoord = customerCoordinate(for: order) {
+                    Annotation("Customer", coordinate: customerCoord) {
+                        mapPin(label: "You", color: .green)
+                    }
+                }
+
+                // Driver annotation
                 if let driverCoordinate {
                     Annotation("Courier", coordinate: driverCoordinate) {
-                        mapPin(label: "D", color: .blue)
+                        driverYShopPin
                     }
                 }
 
-                if let customerCoordinate {
-                    Annotation("You", coordinate: customerCoordinate) {
-                        mapPin(label: "Y", color: .green)
-                    }
-                }
-
+                // Route polyline
                 if !routeCoordinates.isEmpty {
-                    MapPolyline(MKPolyline(coordinates: routeCoordinates, count: routeCoordinates.count))
-                        .stroke(.blue.opacity(0.85), lineWidth: 4)
+                    MapPolyline(coordinates: routeCoordinates).stroke(Color.blue.opacity(0.9), lineWidth: 4)
                 }
             }
+            .simultaneousGesture(DragGesture().onChanged { _ in
+                allowAutoMapUpdates = false
+            })
+            .simultaneousGesture(MagnificationGesture().onChanged { _ in
+                allowAutoMapUpdates = false
+            })
             .frame(height: 220)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
@@ -527,6 +594,22 @@ struct OrderTrackingView: View {
         }
     }
 
+    private var driverYShopPin: some View {
+        let bgColor: Color = colorScheme == .dark ? .white : .black
+        let textColor: Color = colorScheme == .dark ? .black : .white
+        return ZStack {
+            Circle()
+                .fill(bgColor)
+                .frame(width: 36, height: 36)
+                .overlay(Circle().stroke(Color.primary.opacity(0.15), lineWidth: 1))
+
+            Text("Y")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(textColor)
+        }
+        .shadow(color: Color.black.opacity(0.18), radius: 5, x: 0, y: 2)
+    }
+
     private func mapRouteCoordinates(
         storeCoordinate: CLLocationCoordinate2D?,
         driverCoordinate: CLLocationCoordinate2D?,
@@ -580,11 +663,12 @@ struct OrderTrackingView: View {
     }
 
     private func updateMapPosition() {
+        guard allowAutoMapUpdates else { return }
         guard let order = order else { return }
 
         let storeCoordinate = storeCoordinate(for: order)
         let customerCoordinate = customerCoordinate(for: order)
-        let driverCoordinate = coordinate(from: order.driverLocation)
+        let driverCoordinate = coordinate(from: liveDriverLocation ?? order.driverLocation)
 
         let coordinates = [storeCoordinate, customerCoordinate, driverCoordinate].compactMap { $0 }
         guard !coordinates.isEmpty else { return }
@@ -600,12 +684,15 @@ struct OrderTrackingView: View {
                 span: MKCoordinateSpan(latitudeDelta: latitudeDelta, longitudeDelta: longitudeDelta)
             )
         )
+
+        // Keep initial framing only once, then leave map fully under user control.
+        allowAutoMapUpdates = false
     }
 
-    private func updateRoutePolyline(for order: Order) async {
+    private func updateRoutePolyline(for order: Order, driverLocation: String? = nil) async {
         let storeCoordinate = storeCoordinate(for: order)
         let customerCoordinate = customerCoordinate(for: order)
-        let driverCoordinate = coordinate(from: order.driverLocation)
+        let driverCoordinate = coordinate(from: driverLocation ?? order.driverLocation)
 
         let startCoordinate = driverCoordinate ?? storeCoordinate
         guard let startCoordinate, let customerCoordinate else {
@@ -629,8 +716,14 @@ struct OrderTrackingView: View {
             var coords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: count)
             route.polyline.getCoordinates(&coords, range: NSRange(location: 0, length: count))
             routeCoordinates = coords
+            // Update ETA and distance for UI
+            let minutes = max(1, Int((route.expectedTravelTime / 60).rounded()))
+            liveETA = "\(minutes)m"
+            liveDistanceMeters = route.distance
         } catch {
             routeCoordinates = [startCoordinate, customerCoordinate]
+            liveETA = nil
+            liveDistanceMeters = 0
         }
     }
 
