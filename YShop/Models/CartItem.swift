@@ -139,15 +139,13 @@ struct CartItem: Codable, Identifiable {
     var fullImageUrl: String? {
     // First try direct imageUrl
         if let imageUrl = imageUrl, !imageUrl.isEmpty {
-            let baseURL = "http://192.168.1.80:3000"
-            
+            let baseURL = AppConstants.mediaBaseURL
+
             if imageUrl.starts(with: "http") {
-                print("✅ [CARTITEM] Full URL: \(imageUrl)")
                 return imageUrl
             }
-            
+
             let fullURL = imageUrl.starts(with: "/") ? baseURL + imageUrl : baseURL + "/" + imageUrl
-            print("✅ [CARTITEM] Built URL: \(fullURL)")
             return fullURL
         }
         

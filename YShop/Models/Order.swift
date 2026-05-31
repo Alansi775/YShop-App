@@ -2,6 +2,7 @@ import Foundation
 
 enum OrderStatus: String, Codable {
     case pending, confirmed, processing, shipped, outForDelivery = "out_for_delivery", delivered, cancelled, failed
+    case returnRequested = "return"
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -27,6 +28,8 @@ enum OrderStatus: String, Codable {
             self = .cancelled
         case "failed":
             self = .failed
+        case "return", "return_requested", "returnrequested":
+            self = .returnRequested
         default:
             self = .pending
         }
@@ -276,7 +279,7 @@ struct Order: Codable, Identifiable {
         guard let iconUrl = storeIconUrl, !iconUrl.isEmpty else { return nil }
 
         // Use first base candidate and remove API prefix if present
-        let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.80:3000"
+        let baseHost = AppConstants.mediaBaseURL
         let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
 
         if iconUrl.starts(with: "http") {

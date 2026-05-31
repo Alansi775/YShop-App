@@ -21,10 +21,13 @@ struct DeliveryHomeView: View {
     @State private var errorMessage: String?
     @State private var showProfileSheet = false
     @State private var showDashboard = false
+    @State private var showReturnPickups = false
     @State private var pulseAnimation = false
+    @State private var returnBadgeCount = 0
 
     @State private var locationUpdateTimer: Timer?
     @State private var offerPollingTimer: Timer?
+    @State private var returnPollingTimer: Timer?
     @State private var socketObserverId: UUID?
 
     var body: some View {
@@ -48,11 +51,30 @@ struct DeliveryHomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showDashboard = true
-                    } label: {
-                        Image(systemName: "chart.bar.fill")
-                            .foregroundColor(DeliveryTheme.accentBlue)
+                    HStack(spacing: 4) {
+                        Button {
+                            showDashboard = true
+                        } label: {
+                            Image(systemName: "chart.bar.fill")
+                                .foregroundColor(DeliveryTheme.accentBlue)
+                        }
+                        Button {
+                            showReturnPickups = true
+                        } label: {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "arrow.uturn.backward.circle.fill")
+                                    .foregroundColor(DeliveryTheme.accentOrange)
+                                if returnBadgeCount > 0 {
+                                    Text(returnBadgeCount > 9 ? "9+" : "\(returnBadgeCount)")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 2)
+                                        .background(Color.red, in: Capsule())
+                                        .offset(x: 10, y: -8)
+                                }
+                            }
+                        }
                     }
                 }
                 
@@ -77,6 +99,9 @@ struct DeliveryHomeView: View {
             }
             .sheet(isPresented: $showDashboard) {
                 DeliveryDashboardView()
+            }
+            .sheet(isPresented: $showReturnPickups) {
+                DeliveryReturnView()
             }
             .sheet(item: $pendingOffer) { offer in
                 DeliveryOfferSheet(
@@ -432,10 +457,12 @@ struct DeliveryHomeView: View {
             }
 
             await refreshActiveOrderState()
+            await refreshReturnBadgeCount()
 
             if profile.isWorking && profile.isApproved {
                 startLocationTracking()
                 startOfferPolling()
+                startReturnBadgePolling()
             }
         } catch {
             await MainActor.run {
@@ -456,6 +483,7 @@ struct DeliveryHomeView: View {
         errorMessage = nil
         showProfileSheet = false
         showDashboard = false
+        returnBadgeCount = 0
         storedActiveOrderId = ""
         stopAllTracking()
     }
@@ -686,7 +714,40 @@ private func stopOrderSocketObserver() {
         locationUpdateTimer = nil
         offerPollingTimer?.invalidate()
         offerPollingTimer = nil
+        returnPollingTimer?.invalidate()
+        returnPollingTimer = nil
         stopOrderSocketObserver()
+    }
+
+    private func startReturnBadgePolling() {
+        returnPollingTimer?.invalidate()
+        returnPollingTimer = Timer.scheduledTimer(withTimeInterval: 12, repeats: true) { _ in
+            Task { await refreshReturnBadgeCount() }
+        }
+    }
+
+    private func refreshReturnBadgeCount() async {
+        guard isWorking, let driverUid = driverProfile?.uid else {
+            await MainActor.run { returnBadgeCount = 0 }
+            return
+        }
+
+        do {
+            let returns = try await ReturnService.getDriverPendingReturns()
+            let count = returns.filter {
+                $0.driverId == driverUid
+                && ($0.adminAccepted ?? 1) == 1
+                && ($0.storeReceived ?? 0) == 0
+            }.count
+
+            await MainActor.run {
+                returnBadgeCount = count
+            }
+        } catch {
+            await MainActor.run {
+                returnBadgeCount = 0
+            }
+        }
     }
 }
 

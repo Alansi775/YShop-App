@@ -2,18 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>API_BASE_HOST</key>
+	<string>http://192.168.1.50:3000</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	<key>API_BASE_HOST</key>
-	<string>http://192.168.1.80:3000</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>YSHOP needs your location to set your delivery address</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>YSHOP needs your location for delivery tracking</string>
 	<key>NSCameraUsageDescription</key>
 	<string>YSHOP needs camera access to scan the store QR code for pickup verification</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>YSHOP needs your location for delivery tracking</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>YSHOP needs your location to set your delivery address</string>
 </dict>
 </plist>

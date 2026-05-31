@@ -1,4 +1,5 @@
 import SwiftUI
+import Kingfisher
 
 // MARK: - Product Detail View
 struct ProductDetailView: View {
@@ -78,20 +79,18 @@ struct ProductDetailView: View {
     
     private var headerView: some View {
         HStack(spacing: 12) {
-            if let iconUrl = store.fullIconUrl, let url = URL(string: iconUrl) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 40, height: 40)
-                            .clipShape(Circle())
-                            .overlay(Circle().strokeBorder(Color(.separator).opacity(0.2), lineWidth: 1))
-                    default:
+            if let iconUrl = store.fullIconUrl,
+               let url = URL(string: iconUrl) {
+
+                KFImage(url)
+                    .placeholder {
                         placeholderStoreIcon
                     }
-                }
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                    .overlay(Circle().strokeBorder(Color(.separator).opacity(0.2), lineWidth: 1))
             } else {
                 placeholderStoreIcon
             }
@@ -157,23 +156,15 @@ struct ProductDetailView: View {
     private func productImageCell(urlString: String, index: Int) -> some View {
         Group {
             if let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
+                KFImage(url)
+                    .placeholder {
                         ZStack {
                             Color(.secondarySystemBackground)
                             ProgressView()
                         }
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                    case .failure:
-                        fallbackImageView
-                    @unknown default:
-                        fallbackImageView
                     }
-                }
+                    .resizable()
+                    .scaledToFit()
             } else {
                 fallbackImageView
             }
@@ -248,18 +239,17 @@ struct ProductDetailView: View {
                 .foregroundColor(Color(.tertiaryLabel))
             
             HStack(spacing: 12) {
-                if let iconUrl = store.fullIconUrl, let url = URL(string: iconUrl) {
-                    AsyncImage(url: url) { phase in
-                        if let image = phase.image {
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 48, height: 48)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                        } else {
+                if let iconUrl = store.fullIconUrl,
+                   let url = URL(string: iconUrl) {
+
+                    KFImage(url)
+                        .placeholder {
                             placeholderStoreIcon.frame(width: 48, height: 48)
                         }
-                    }
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 48, height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                 } else {
                     placeholderStoreIcon.frame(width: 48, height: 48)
                 }
@@ -300,14 +290,14 @@ struct ProductDetailView: View {
 
         if trimmed.starts(with: "http") {
             if trimmed.contains("localhost:3000") {
-                let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.80:3000"
+                let baseHost = AppConstants.mediaBaseURL
                 let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
                 return trimmed.replacingOccurrences(of: "http://localhost:3000", with: cleanBase)
             }
             return trimmed
         }
 
-        let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.80:3000"
+        let baseHost = AppConstants.mediaBaseURL
         let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
         return cleanBase + trimmed
     }
@@ -422,19 +412,14 @@ struct FullScreenImageView: View {
                     TabView(selection: $selectedIndex) {
                         ForEach(imageUrls.indices, id: \.self) { index in
                             if let url = URL(string: imageUrls[index]) {
-                                AsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .success(let image):
-                                        image.resizable().scaledToFit().padding(.horizontal, 12)
-                                    case .empty:
-                                        ProgressView().tint(colorScheme == .dark ? .white : .black)
-                                    case .failure:
-                                        Image(systemName: "photo").foregroundColor(.gray)
-                                    @unknown default:
-                                        EmptyView()
+                                KFImage(url)
+                                    .placeholder {
+                                        ProgressView()
+                                            .tint(colorScheme == .dark ? .white : .black)
                                     }
-                                }
-                                .tag(index)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .padding(.horizontal, 12)
                             }
                         }
                     }

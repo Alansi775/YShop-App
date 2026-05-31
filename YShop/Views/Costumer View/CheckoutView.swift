@@ -50,30 +50,30 @@ struct CheckoutView: View {
     }
     
     private func calculateDeliveryTime(for storeId: String, option: String) -> String {
-        print("192.168.1.80 [DELIVERY TIME] Checking conditions - storesLoaded: \(storesLoaded), storeId: \(storeId)")
+        print("192.168.1.50 [DELIVERY TIME] Checking conditions - storesLoaded: \(storesLoaded), storeId: \(storeId)")
         guard storesLoaded else { 
-            print("192.168.1.80 [DELIVERY TIME] Stores not loaded yet")
+            print("192.168.1.50 [DELIVERY TIME] Stores not loaded yet")
             return "N/A" 
         }
         
-        print("192.168.1.80 [DELIVERY TIME] Store details count: \(storeDetails.count)")
+        print("192.168.1.50 [DELIVERY TIME] Store details count: \(storeDetails.count)")
         guard let store = storeDetails[storeId] else { 
-            print("192.168.1.80 [DELIVERY TIME] Store not found in storeDetails for id: \(storeId)")
+            print("192.168.1.50 [DELIVERY TIME] Store not found in storeDetails for id: \(storeId)")
             return "N/A" 
         }
         
-        print("192.168.1.80 [DELIVERY TIME] Selected location: (\(selectedLatitude), \(selectedLongitude))")
+        print("192.168.1.50 [DELIVERY TIME] Selected location: (\(selectedLatitude), \(selectedLongitude))")
         guard selectedLatitude != 0, selectedLongitude != 0 else { 
-            print("192.168.1.80 [DELIVERY TIME] Location not set")
+            print("192.168.1.50 [DELIVERY TIME] Location not set")
             return "N/A" 
         }
         
         guard let storeLat = store.latitude, let storeLon = store.longitude else {
-            print("192.168.1.80 [DELIVERY TIME] Store coordinates missing")
+            print("192.168.1.50 [DELIVERY TIME] Store coordinates missing")
             return "N/A"
         }
         
-        print("192.168.1.80 [DELIVERY TIME] Store location: (\(storeLat), \(storeLon)), Type: \(store.storeType ?? "unknown")")
+        print("192.168.1.50 [DELIVERY TIME] Store location: (\(storeLat), \(storeLon)), Type: \(store.storeType ?? "unknown")")
         
         let storeType = store.storeType?.lowercased() ?? ""
         let isFoodRelated = storeType.contains("food") || storeType.contains("pharmacy") || storeType.contains("market")
@@ -87,16 +87,16 @@ struct CheckoutView: View {
                     lat2: selectedLatitude,
                     lon2: selectedLongitude
                 )
-                print("192.168.1.80 [DELIVERY TIME] Distance: \(distance) km")
+                print("192.168.1.50 [DELIVERY TIME] Distance: \(distance) km")
                 // المسافة بالكيلومتر، تقريباً 1 كم = 5 دقائق + 15 دقيقة ثابتة
                 let travelTime = Int(distance * 5) + 25
                 let minTime = max(10, travelTime)
                 let maxTime = minTime + 5
-                print("192.168.1.80 [DELIVERY TIME] Standard Delivery: \(minTime)-\(maxTime) Mins")
+                print("192.168.1.50 [DELIVERY TIME] Standard Delivery: \(minTime)-\(maxTime) Mins")
                 return "\(minTime)-\(maxTime) Mins"
             } else {
                 // ملابس ومنتجات أخرى
-                print("192.168.1.80 [DELIVERY TIME] Non-food item: 1-2 Days")
+                print("192.168.1.50 [DELIVERY TIME] Non-food item: 1-2 Days")
                 return "1-2 Days"
             }
         } else if option == "Drone" {
@@ -111,7 +111,7 @@ struct CheckoutView: View {
             let droneTime = Int(distance * 2) + 13
             let minTime = max(5, droneTime)
             let maxTime = minTime + 5
-            print("192.168.1.80 [DELIVERY TIME] Drone Delivery: \(minTime)-\(maxTime) Mins")
+            print("192.168.1.50 [DELIVERY TIME] Drone Delivery: \(minTime)-\(maxTime) Mins")
             return "\(minTime)-\(maxTime) Mins"
         }
         

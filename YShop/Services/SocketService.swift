@@ -20,7 +20,7 @@ class SocketService: NSObject, ObservableObject {
     private var currentToken: String?
     private var orderObservers: [String: [UUID: () -> Void]] = [:]
     private var locationObservers: [String: [UUID: (String) -> Void]] = [:]
-    private let baseURL: String = AppConstants.baseURL.replacingOccurrences(of: "http", with: "ws")
+    private let baseURL: String = AppConstants.mediaBaseURL.replacingOccurrences(of: "http", with: "ws") + "/api/v1"
 
     override private init() {
         super.init()

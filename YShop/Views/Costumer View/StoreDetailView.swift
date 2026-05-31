@@ -1,4 +1,5 @@
 import SwiftUI
+import Kingfisher
 
 // MARK: - Store Detail View
 struct StoreDetailView: View {
@@ -102,18 +103,10 @@ struct StoreDetailView: View {
                 
                 Group {
                     if let fullIconUrl = store.fullIconUrl, let url = URL(string: fullIconUrl) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().scaledToFill()
-                            case .empty:
-                                ProgressView()
-                            default:
-                                Image(systemName: "building.2")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(Color(.tertiaryLabel))
-                            }
-                        }
+                        KFImage(url)
+                            .fade(duration: 0.15)
+                            .resizable()
+                            .scaledToFill()
                     } else {
                         Image(systemName: "building.2")
                             .font(.system(size: 32))
@@ -240,11 +233,15 @@ struct StoreMinimalProductCard: View {
         VStack(alignment: .leading, spacing: 10) {
             Group {
                 if let imageUrl = product.fullImageUrl, let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Color(.secondarySystemBackground)
-                    }
+                    KFImage(url)
+                        .placeholder {
+                            Color(.secondarySystemBackground)
+                        }
+                        .loadDiskFileSynchronously()
+                        .cacheMemoryOnly(false)
+                        .fade(duration: 0.15)
+                        .resizable()
+                        .scaledToFill()
                 } else {
                     Color(.secondarySystemBackground)
                         .overlay(Image(systemName: "photo").foregroundColor(Color(.tertiaryLabel)))

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		DE2DE2492FCBBB3F000004DA /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = DE2DE2482FCBBB3F000004DA /* Kingfisher */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		B3110AE62D1DA1B300619E9A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -65,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DE2DE2492FCBBB3F000004DA /* Kingfisher in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +130,7 @@
 			);
 			name = YShop;
 			packageProductDependencies = (
+				DE2DE2482FCBBB3F000004DA /* Kingfisher */,
 			);
 			productName = YShop;
 			productReference = B3110AD52D1DA1B200619E9A /* YShop.app */;
@@ -205,6 +211,7 @@
 			mainGroup = B3110ACC2D1DA1B200619E9A;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				DE2DE2472FCBBB3F000004DA /* XCRemoteSwiftPackageReference "Kingfisher" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B3110AD62D1DA1B200619E9A /* Products */;
@@ -571,6 +578,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DE2DE2472FCBBB3F000004DA /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DE2DE2482FCBBB3F000004DA /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DE2DE2472FCBBB3F000004DA /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = B3110ACD2D1DA1B200619E9A /* Project object */;
 }

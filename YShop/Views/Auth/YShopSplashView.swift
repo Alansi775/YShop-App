@@ -2,12 +2,12 @@
 //  YShopSplashView.swift
 //  YSHOP
 //
-//  Elegant splash with letter-by-letter reveal + traveling shimmer wave
+//  Premium Startup-Style Splash with Cinematic Reveal & Fluid Shimmer
 //
 
 import SwiftUI
 
-// MARK: - Splash Letter (one-shot shimmer)
+// MARK: - Splash Letter (Cinematic Reveal + Shimmer)
 
 private struct SplashLetter: View {
     let char: String
@@ -19,37 +19,38 @@ private struct SplashLetter: View {
     
     var body: some View {
         Text(char)
-            .font(.system(size: 72, weight: .black, design: .default))
-            .tracking(-1)
-            .foregroundStyle(Color.yshopInkDynamic)
+            .font(.system(size: 64, weight: .bold, design: .default))
+            .tracking(4) // تباعد أنيق ومودرن
+            .foregroundStyle(Color.primary)
+            // تأثير الدخول السينمائي (Blur + Scale)
+            .scaleEffect(isVisible ? 1.0 : 0.85)
+            .blur(radius: isVisible ? 0 : 10)
+            .opacity(isVisible ? 1 : 0)
             .overlay(
                 GeometryReader { geo in
                     LinearGradient(
                         gradient: Gradient(stops: [
                             .init(color: .clear, location: 0.0),
-                            .init(color: shimmerColor.opacity(0.85), location: 0.5),
+                            .init(color: shimmerColor.opacity(0.9), location: 0.5),
                             .init(color: .clear, location: 1.0)
                         ]),
                         startPoint: .leading,
                         endPoint: .trailing
                     )
-                    .frame(width: geo.size.width * 2)
+                    .frame(width: geo.size.width * 2.5)
                     .offset(x: geo.size.width * shimmerProgress)
                 }
+                .mask(
+                    Text(char)
+                        .font(.system(size: 64, weight: .bold, design: .default))
+                        .tracking(4)
+                )
             )
-            .mask(
-                Text(char)
-                    .font(.system(size: 72, weight: .black, design: .default))
-                    .tracking(-1)
-            )
-            .opacity(isVisible ? 1 : 0)
-            .animation(.easeOut(duration: 0.12), value: isVisible)
+            .animation(.easeOut(duration: 0.6), value: isVisible)
             .onChange(of: isShimmering) { _, newValue in
                 if newValue {
-                    // ابدأ من اليسار خارج الحرف
                     shimmerProgress = -1.0
-                    // وحرّك الـ shimmer ليعبر الحرف ويخرج من اليمين
-                    withAnimation(.linear(duration: 0.5)) {
+                    withAnimation(.easeInOut(duration: 0.8)) {
                         shimmerProgress = 1.5
                     }
                 }
@@ -66,29 +67,39 @@ struct YShopSplashView: View {
     @State private var displayedLetterCount = 0
     @State private var shimmerStates: [Bool] = []
     @State private var taglineOpacity: Double = 0
-    @State private var compositionOffset: CGFloat = 20
+    @State private var compositionOffset: CGFloat = 15
     @State private var compositionOpacity: Double = 1
+    @State private var backgroundGlowScale: CGFloat = 0.8
     
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     
     let logo = "YSHOP"
-    let tagline = "EVERYTHING DELIVERED"
+    let tagline = "E V E R Y T H I N G   D E L I V E R E D" // مسافات واسعة لمظهر فاخر
     
-    // نفس الأزرق الفاتح اللي اخترناه في LoginView
+    // لون الشيمر الأزرق النظيف
     private var shimmerBlue: Color {
-        Color(red: 0.4, green: 0.7, blue: 1.0)
+        Color(red: 0.2, green: 0.6, blue: 1.0)
     }
     
     var body: some View {
         ZStack {
-            //  نفس خلفية LoginView بالضبط - يطابق Light & Dark Mode
+            // خلفية النظام الأساسية
             Color(.systemBackground)
                 .ignoresSafeArea()
             
-            VStack(spacing: 28) {
+            // هالة ضوئية محيطية خلف الشعار (Ambient Glow)
+            Circle()
+                .fill(shimmerBlue.opacity(colorScheme == .dark ? 0.07 : 0.04))
+                .frame(width: 250, height: 250)
+                .blur(radius: 60)
+                .scaleEffect(backgroundGlowScale)
+                .animation(.easeInOut(duration: 3).repeatForever(autoreverses: true), value: backgroundGlowScale)
+            
+            VStack(spacing: 24) {
                 Spacer()
                 
-                // Animated Wordmark — Letter by Letter with Traveling Shimmer
+                // Animated Wordmark
                 HStack(spacing: 0) {
                     Spacer()
                     ForEach(0..<logo.count, id: \.self) { index in
@@ -104,12 +115,14 @@ struct YShopSplashView: View {
                     Spacer()
                 }
                 
-                // Tagline — Subtle fade in
+                // Tagline — Minimalist Fade in
                 Text(tagline)
-                    .font(.system(size: 12, weight: .semibold, design: .default))
-                    .tracking(3)
-                    .foregroundStyle(Color.yshopGoldDynamic)
+                    .font(.system(size: 11, weight: .semibold, design: .default))
+                    .tracking(2)
+                    .foregroundStyle(Color.secondary)
                     .opacity(taglineOpacity)
+                    .offset(y: taglineOpacity == 1 ? 0 : 5)
+                    .animation(.easeOut(duration: 0.8), value: taglineOpacity)
                 
                 Spacer()
             }
@@ -120,13 +133,14 @@ struct YShopSplashView: View {
         .contentShape(Rectangle())
         .onTapGesture { skip() }
         .task {
+            // تشغيل نبض الخلفية فوراً
+            backgroundGlowScale = 1.2
             await runSequence()
         }
     }
     
     @MainActor
     private func runSequence() async {
-        // تهيئة مصفوفة الـ shimmer states
         shimmerStates = Array(repeating: false, count: logo.count)
         
         if reduceMotion {
@@ -137,46 +151,44 @@ struct YShopSplashView: View {
             return
         }
         
-        //  Letter-by-letter reveal مع موجة shimmer متتابعة
+        // Letter-by-letter cinematic reveal
         for i in 0..<logo.count {
-            // 1. ظهور الحرف الحالي
             displayedLetterCount = i + 1
             
-            // 2. تأخير بسيط جداً عشان الحرف يبين قبل ما يبدأ الـ shimmer
-            try? await Task.sleep(nanoseconds: 80_000_000) // 0.08s
+            // سرعة ظهور الأحرف متتالية
+            try? await Task.sleep(nanoseconds: 120_000_000) // 0.12s
             
-            // 3. تشغيل shimmer على الحرف (يمر مرة وحدة على شكل موجة)
             shimmerStates[i] = true
             
-            // 4. انتظار قبل الانتقال للحرف التالي (الموجة "تخرج" والحرف اللي بعده يبدأ)
-            try? await Task.sleep(nanoseconds: 320_000_000) // 0.32s
+            try? await Task.sleep(nanoseconds: 150_000_000) // 0.15s
         }
         
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        try? await Task.sleep(nanoseconds: 200_000_000)
         
-        // Fade in tagline
+        // ظهور الشعار اللفظي بسلاسة
+        taglineOpacity = 1
+        
+        // وقت كافي للمستخدم للاستمتاع بالمظهر
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        
+        // خروج أنيق (Fade out & Slight move up)
         withAnimation(.easeInOut(duration: 0.5)) {
-            taglineOpacity = 1
-        }
-        try? await Task.sleep(nanoseconds: 900_000_000)
-        
-        // Fade out
-        withAnimation(.easeInOut(duration: 0.4)) {
             compositionOpacity = 0
-            compositionOffset = 10
+            compositionOffset = -10
         }
-        try? await Task.sleep(nanoseconds: 400_000_000)
         
+        try? await Task.sleep(nanoseconds: 500_000_000)
         onFinish()
     }
     
     private func skip() {
         guard compositionOpacity > 0 else { return }
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(.easeOut(duration: 0.3)) {
             compositionOpacity = 0
+            compositionOffset = -10
         }
         Task {
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(nanoseconds: 300_000_000)
             onFinish()
         }
     }

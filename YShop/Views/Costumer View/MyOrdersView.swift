@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct MyOrdersView: View {
 	@EnvironmentObject private var authManager: AuthManager
@@ -11,6 +12,9 @@ struct MyOrdersView: View {
 	@State private var errorMessage: String?
 	@State private var selectedOrderId: String?
 	@State private var selectedReturnOrder: Order?
+	@State private var cancelReturnOrder: Order?
+	@State private var showCancelReturnAlert = false
+	@State private var isCancellingReturn = false
 	@State private var showTrackingSheet = false
 
 	private let tabs = ["All", "Active", "Delivered"]
@@ -63,10 +67,18 @@ struct MyOrdersView: View {
 			}
 		}
 		.sheet(item: $selectedReturnOrder) { order in
-			NavigationStack {
-				ReturnRequestSheet(order: order, store: storesById[order.storeId])
-					.environmentObject(authManager)
+			ReturnRequestSheet(order: order, store: storesById[order.storeId]) {
+				Task { await loadOrders() }
 			}
+			.environmentObject(authManager)
+		}
+		.alert("Cancel Return?", isPresented: $showCancelReturnAlert) {
+			Button("Cancel Return", role: .destructive) {
+				Task { await cancelReturn() }
+			}
+			Button("Keep", role: .cancel) { cancelReturnOrder = nil }
+		} message: {
+			Text("Are you sure you want to cancel your return request?")
 		}
 	}
 
@@ -159,7 +171,11 @@ struct MyOrdersView: View {
 								} else if order.status == .delivered && policy.isWithinWindow {
 									selectedReturnOrder = order
 								}
-							}
+							},
+							cancelReturnAction: order.status == .returnRequested ? {
+								cancelReturnOrder = order
+								showCancelReturnAlert = true
+							} : nil
 						)
 					}
 				}
@@ -210,6 +226,19 @@ struct MyOrdersView: View {
 		}
 
 		isLoading = false
+	}
+
+	private func cancelReturn() async {
+		guard let order = cancelReturnOrder else { return }
+		do {
+			try await ReturnService.cancelReturnRequest(orderId: order.id)
+			cancelReturnOrder = nil
+			await loadOrders()
+		} catch {
+			// Silently reload even on error
+			cancelReturnOrder = nil
+			await loadOrders()
+		}
 	}
 
 	private func loadStoreMetadata(for orders: [Order]) async {
@@ -313,6 +342,7 @@ struct MyOrderCard: View {
 	let store: Store?
 	let primaryActionTitle: String
 	let primaryAction: () -> Void
+	var cancelReturnAction: (() -> Void)? = nil
 
 	@Environment(\.colorScheme) private var colorScheme
 
@@ -393,7 +423,35 @@ struct MyOrderCard: View {
 				}
 			}
 
-			if order.status == .delivered {
+			if order.status == .returnRequested {
+				// Return in progress — show cancel option
+				VStack(alignment: .leading, spacing: 8) {
+					HStack(spacing: 8) {
+						Image(systemName: "arrow.uturn.backward.circle.fill")
+							.foregroundColor(.orange)
+							.font(.system(size: 13))
+						Text("Return request submitted. A driver will pick up the item.")
+							.font(.system(size: 12))
+							.foregroundColor(Color(.secondaryLabel))
+							.fixedSize(horizontal: false, vertical: true)
+					}
+					if let cancelAction = cancelReturnAction {
+						Button(action: cancelAction) {
+							Text("Cancel Return")
+								.font(.system(size: 13, weight: .bold))
+								.foregroundColor(.orange)
+								.frame(maxWidth: .infinity)
+								.frame(height: 44)
+								.background(Color.orange.opacity(0.1))
+								.clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+								.overlay(
+									RoundedRectangle(cornerRadius: 14, style: .continuous)
+										.stroke(Color.orange.opacity(0.3), lineWidth: 1)
+								)
+						}
+					}
+				}
+			} else if order.status == .delivered {
 				VStack(alignment: .leading, spacing: 8) {
 					HStack(spacing: 8) {
 						Image(systemName: "clock.fill")
@@ -489,54 +547,58 @@ struct MyOrderCard: View {
 	}
 }
 
+// MARK: - Return Request Sheet (3-Step Wizard)
 struct ReturnRequestSheet: View {
 	let order: Order
 	let store: Store?
+	let onSuccess: (() -> Void)?
 
 	@Environment(\.dismiss) private var dismiss
-	@State private var reason: String = ""
-	@State private var details: String = ""
+	@State private var step = 0
+	@State private var reason = ""
+	@State private var photos: [String: UIImage] = [:]
+	@State private var activePhotoLabel: String? = nil
+	@State private var showImageSource = false
+	@State private var showCameraPicker = false
+	@State private var showLibraryPicker = false
 	@State private var isSubmitting = false
 	@State private var errorMessage: String?
-	@State private var successMessage: String?
 
-	private var storeType: String {
-		store?.storeType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-	}
-
-	private var policyText: String {
-		if storeType == "clothes" {
-			return "Clothing orders can be returned within 3 days of delivery."
+	private let photoLabels = ["top", "bottom", "left", "right", "front", "back"]
+	private var isReasonValid: Bool { reason.trimmingCharacters(in: .whitespacesAndNewlines).count >= 10 }
+	private var allPhotosAdded: Bool { photos.count == 6 }
+	private var canProceed: Bool {
+		switch step {
+		case 0: return isReasonValid
+		case 1: return allPhotosAdded
+		default: return true
 		}
-
-		return "Food, market, and pharmacy orders can be reported within 30 minutes after delivery."
-	}
-
-	private var actionTitle: String {
-		storeType == "clothes" ? "Request Return" : "Submit Report"
 	}
 
 	var body: some View {
 		NavigationStack {
-			ZStack {
-				Color(.systemBackground).ignoresSafeArea()
+			VStack(spacing: 0) {
+				progressBar
+					.padding(.horizontal, 20)
+					.padding(.top, 8)
+					.padding(.bottom, 16)
 
-				ScrollView(showsIndicators: false) {
-					VStack(alignment: .leading, spacing: 18) {
-						header
-						policyCard
-						formCard
-						submitButton
-					}
-					.padding(16)
+				TabView(selection: $step) {
+					reasonStep.tag(0)
+					photosStep.tag(1)
+					reviewStep.tag(2)
 				}
+				.tabViewStyle(.page(indexDisplayMode: .never))
+				.animation(.easeInOut(duration: 0.3), value: step)
+
+				footer
 			}
-			.navigationTitle("Return / Report")
+			.navigationTitle(["Reason", "Photos", "Review"][step])
 			.navigationBarTitleDisplayMode(.inline)
 			.toolbar {
 				ToolbarItem(placement: .topBarLeading) {
 					NativeCircleIconButton(
-						systemName: "chevron.left",
+						systemName: "xmark",
 						action: { dismiss() },
 						iconColor: .primary,
 						size: 35.5,
@@ -545,129 +607,329 @@ struct ReturnRequestSheet: View {
 					)
 				}
 			}
-			.alert("Success", isPresented: Binding(
-				get: { successMessage != nil },
-				set: { if !$0 { successMessage = nil } }
-			)) {
-				Button("OK") { dismiss() }
-			} message: {
-				Text(successMessage ?? "Return request submitted.")
+		}
+		.sheet(isPresented: $showCameraPicker) {
+			if let label = activePhotoLabel {
+				ImagePickerView(
+					image: Binding(get: { photos[label] }, set: { if let img = $0 { photos[label] = img } }),
+					sourceType: .camera
+				)
+			}
+		}
+		.sheet(isPresented: $showLibraryPicker) {
+			if let label = activePhotoLabel {
+				ImagePickerView(
+					image: Binding(get: { photos[label] }, set: { if let img = $0 { photos[label] = img } }),
+					sourceType: .photoLibrary
+				)
+			}
+		}
+		.confirmationDialog("Add Photo", isPresented: $showImageSource, titleVisibility: .visible) {
+			if UIImagePickerController.isSourceTypeAvailable(.camera) {
+				Button("Take Photo") { showCameraPicker = true }
+			}
+			Button("Choose from Library") { showLibraryPicker = true }
+			Button("Cancel", role: .cancel) { activePhotoLabel = nil }
+		}
+	}
+
+	// MARK: - Progress Bar
+	private var progressBar: some View {
+		HStack(spacing: 8) {
+			ForEach(0..<3, id: \.self) { i in
+				RoundedRectangle(cornerRadius: 2)
+					.fill(i <= step ? Color(.label) : Color(.tertiaryLabel))
+					.frame(height: 3)
+					.animation(.easeInOut, value: step)
 			}
 		}
 	}
 
-	private var header: some View {
-		VStack(alignment: .leading, spacing: 6) {
-			Text(order.storeName ?? store?.name ?? "Order #\(order.id)")
-				.font(.system(size: 22, weight: .bold))
-				.foregroundColor(Color(.label))
+	// MARK: - Step 1: Reason
+	private var reasonStep: some View {
+		ScrollView(showsIndicators: false) {
+			VStack(alignment: .leading, spacing: 20) {
+				VStack(alignment: .leading, spacing: 6) {
+					Text("Why are you returning this?")
+						.font(.system(size: 20, weight: .bold))
+					Text("Minimum 10 characters")
+						.font(.system(size: 13))
+						.foregroundColor(Color(.secondaryLabel))
+				}
 
-			Text("Order #\(order.id) • \(order.status.displayTitle)")
-				.font(.system(size: 13, weight: .regular))
-				.foregroundColor(Color(.secondaryLabel))
-		}
-	}
+				ZStack(alignment: .topLeading) {
+					RoundedRectangle(cornerRadius: 14, style: .continuous)
+						.fill(Color(.secondarySystemBackground))
+						.frame(minHeight: 140)
+					if reason.isEmpty {
+						Text("Describe the issue or reason for return...")
+							.foregroundColor(Color(.placeholderText))
+							.font(.system(size: 15))
+							.padding(EdgeInsets(top: 16, leading: 16, bottom: 0, trailing: 16))
+					}
+					TextEditor(text: $reason)
+						.frame(minHeight: 140)
+						.background(Color.clear)
+						.scrollContentBackground(.hidden)
+						.padding(8)
+				}
+				.overlay(
+					RoundedRectangle(cornerRadius: 14, style: .continuous)
+						.stroke(isReasonValid ? Color.green.opacity(0.5) : Color(.separator), lineWidth: 1.5)
+				)
 
-	private var policyCard: some View {
-		VStack(alignment: .leading, spacing: 8) {
-			Text("Policy Window")
-				.font(.system(size: 13, weight: .semibold))
-				.foregroundColor(Color(.secondaryLabel))
-
-			Text(policyText)
-				.font(.system(size: 14, weight: .regular))
-				.foregroundColor(Color(.label))
-				.fixedSize(horizontal: false, vertical: true)
-		}
-		.padding(14)
-		.background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-	}
-
-	private var formCard: some View {
-		VStack(alignment: .leading, spacing: 14) {
-			Text("Reason")
-				.font(.system(size: 13, weight: .semibold))
-				.foregroundColor(Color(.secondaryLabel))
-
-			TextField("Tell us why you want to return/report", text: $reason, axis: .vertical)
-				.textFieldStyle(.roundedBorder)
-
-			Text("Details")
-				.font(.system(size: 13, weight: .semibold))
-				.foregroundColor(Color(.secondaryLabel))
-
-			TextEditor(text: $details)
-				.frame(minHeight: 120)
-				.padding(8)
-				.background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-			Text("Photos support can be added later. This first version follows the Flutter flow: reason first, then submission.")
-				.font(.system(size: 11, weight: .regular))
-				.foregroundColor(Color(.secondaryLabel))
-				.fixedSize(horizontal: false, vertical: true)
-
-			if let errorMessage {
-				Text(errorMessage)
-					.font(.system(size: 12, weight: .semibold))
-					.foregroundColor(.red)
-			}
-		}
-		.padding(14)
-		.background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-	}
-
-	private var submitButton: some View {
-		Button {
-			Task { await submitReturn() }
-		} label: {
-			HStack(spacing: 8) {
-				if isSubmitting {
-					ProgressView().tint(.white)
-				} else {
-					Image(systemName: "paperplane.fill")
-					Text(actionTitle)
-						.font(.system(size: 14, weight: .bold))
+				HStack {
+					Spacer()
+					Text("\(reason.count)/10")
+						.font(.system(size: 12, weight: .semibold))
+						.foregroundColor(isReasonValid ? .green : Color(.secondaryLabel))
 				}
 			}
-			.foregroundColor(.white)
-			.frame(maxWidth: .infinity)
-			.frame(height: 48)
-			.background(Color.black)
-			.clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+			.padding(20)
 		}
-		.disabled(isSubmitting || reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 	}
 
-	private func submitReturn() async {
-		let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
-		guard !trimmedReason.isEmpty else {
-			errorMessage = "Please enter a reason."
-			return
-		}
+	// MARK: - Step 2: Photos
+	private var photosStep: some View {
+		ScrollView(showsIndicators: false) {
+			VStack(alignment: .leading, spacing: 16) {
+				VStack(alignment: .leading, spacing: 6) {
+					Text("Take 6 Photos")
+						.font(.system(size: 20, weight: .bold))
+					Text("Capture all angles: top, bottom, left, right, front, back")
+						.font(.system(size: 13))
+						.foregroundColor(Color(.secondaryLabel))
+				}
 
-		await MainActor.run {
-			isSubmitting = true
-			errorMessage = nil
+				LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+					ForEach(photoLabels, id: \.self) { label in
+						photoCell(label: label)
+					}
+				}
+			}
+			.padding(20)
+		}
+	}
+
+	private func photoCell(label: String) -> some View {
+		let captured = photos[label]
+		return Button {
+			activePhotoLabel = label
+			showImageSource = true
+		} label: {
+			ZStack(alignment: .bottom) {
+				Group {
+					if let img = captured {
+						Image(uiImage: img)
+							.resizable()
+							.scaledToFill()
+					} else {
+						Color(captured != nil ? UIColor.systemGreen : UIColor.secondarySystemBackground)
+							.overlay(
+								VStack(spacing: 8) {
+									Image(systemName: "camera.fill")
+										.font(.system(size: 24))
+										.foregroundColor(Color(.secondaryLabel))
+									Text("Tap to capture")
+										.font(.system(size: 11))
+										.foregroundColor(Color(.secondaryLabel))
+								}
+							)
+					}
+				}
+				.frame(height: 130)
+				.clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+				.overlay(
+					RoundedRectangle(cornerRadius: 14, style: .continuous)
+						.stroke(captured != nil ? Color.green.opacity(0.5) : Color(.separator), lineWidth: 1.5)
+				)
+
+				HStack {
+					Text(label.capitalized)
+						.font(.system(size: 12, weight: .semibold))
+						.foregroundColor(.white)
+					Spacer()
+					if captured != nil {
+						Image(systemName: "checkmark.circle.fill")
+							.foregroundColor(.green)
+							.font(.system(size: 14))
+					}
+				}
+				.padding(.horizontal, 10)
+				.padding(.vertical, 6)
+				.background(Color.black.opacity(0.55))
+				.clipShape(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 14, bottomTrailingRadius: 14, topTrailingRadius: 0))
+			}
+			.frame(height: 130)
+		}
+		.buttonStyle(.plain)
+	}
+
+	// MARK: - Step 3: Review
+	private var reviewStep: some View {
+		ScrollView(showsIndicators: false) {
+			VStack(alignment: .leading, spacing: 16) {
+				Text("Review & Confirm")
+					.font(.system(size: 20, weight: .bold))
+
+				reviewRow(label: "Order", value: "#\(order.id)")
+				reviewRow(label: "Reason", value: reason.trimmingCharacters(in: .whitespacesAndNewlines))
+				reviewRow(label: "Photos", value: "\(photos.count) / 6")
+
+				VStack(alignment: .leading, spacing: 8) {
+					Text("Photos Preview")
+						.font(.system(size: 13, weight: .semibold))
+						.foregroundColor(Color(.secondaryLabel))
+
+					LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 8) {
+						ForEach(photoLabels, id: \.self) { label in
+							if let img = photos[label] {
+								Image(uiImage: img)
+									.resizable()
+									.scaledToFill()
+									.frame(height: 80)
+									.clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+							} else {
+								RoundedRectangle(cornerRadius: 10)
+									.fill(Color(.tertiarySystemBackground))
+									.frame(height: 80)
+									.overlay(Image(systemName: "xmark").foregroundColor(Color(.quaternaryLabel)))
+							}
+						}
+					}
+				}
+				.padding(14)
+				.background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+				HStack(alignment: .top, spacing: 10) {
+					Image(systemName: "info.circle.fill").foregroundColor(.orange)
+					Text("Your return request will be reviewed. A driver will pick up the item from you within 24-48 hours.")
+						.font(.system(size: 13))
+						.fixedSize(horizontal: false, vertical: true)
+				}
+				.padding(14)
+				.background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+				if let errorMessage {
+					Text(errorMessage)
+						.font(.system(size: 12, weight: .semibold))
+						.foregroundColor(.red)
+				}
+			}
+			.padding(20)
+		}
+	}
+
+	private func reviewRow(label: String, value: String) -> some View {
+		HStack {
+			Text(label)
+				.font(.system(size: 13))
+				.foregroundColor(Color(.secondaryLabel))
+				.frame(width: 60, alignment: .leading)
+			Text(value)
+				.font(.system(size: 13, weight: .semibold))
+				.multilineTextAlignment(.leading)
+			Spacer()
+		}
+		.padding(14)
+		.background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+	}
+
+	// MARK: - Footer Navigation
+	private var footer: some View {
+		HStack(spacing: 12) {
+			if step > 0 {
+				Button("Back") { withAnimation { step -= 1 } }
+					.foregroundColor(Color(.label))
+					.frame(maxWidth: .infinity)
+					.frame(height: 48)
+					.background(Color(.secondarySystemBackground))
+					.clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+			}
+
+			Button {
+				if step < 2 {
+					withAnimation { step += 1 }
+				} else {
+					Task { await submitReturn() }
+				}
+			} label: {
+				HStack(spacing: 8) {
+					if isSubmitting {
+						ProgressView().tint(.white)
+					} else if step == 2 {
+						Image(systemName: "checkmark")
+						Text("Submit Request").font(.system(size: 14, weight: .bold))
+					} else {
+						Text("Next").font(.system(size: 14, weight: .bold))
+						Image(systemName: "arrow.right")
+					}
+				}
+				.foregroundColor(canProceed ? .white : Color(.secondaryLabel))
+				.frame(maxWidth: .infinity)
+				.frame(height: 48)
+				.background(canProceed ? Color.black : Color(.systemGray5))
+				.clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+			}
+			.disabled(!canProceed || isSubmitting)
+		}
+		.padding(.horizontal, 20)
+		.padding(.vertical, 12)
+	}
+
+	// MARK: - Submit
+	private func submitReturn() async {
+		await MainActor.run { isSubmitting = true; errorMessage = nil }
+
+		let photoData: [(label: String, data: Data)] = photoLabels.compactMap { label in
+			guard let img = photos[label], let data = img.jpegData(compressionQuality: 0.8) else { return nil }
+			return (label: label, data: data)
 		}
 
 		do {
-			_ = try await ReturnService.createReturnRequest(
+			_ = try await ReturnService.submitReturnRequest(
 				orderId: order.id,
-				reason: trimmedReason,
-				description: details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : details.trimmingCharacters(in: .whitespacesAndNewlines),
-				images: nil
+				reason: reason.trimmingCharacters(in: .whitespacesAndNewlines),
+				photos: photoData
 			)
-
 			await MainActor.run {
-				successMessage = "Your return request has been submitted."
 				isSubmitting = false
+				onSuccess?()
+				dismiss()
 			}
 		} catch {
-			await MainActor.run {
-				errorMessage = error.localizedDescription
-				isSubmitting = false
-			}
+			await MainActor.run { errorMessage = error.localizedDescription; isSubmitting = false }
 		}
+	}
+}
+
+// MARK: - Image Picker
+struct ImagePickerView: UIViewControllerRepresentable {
+	@Binding var image: UIImage?
+	var sourceType: UIImagePickerController.SourceType = .photoLibrary
+	@Environment(\.dismiss) private var dismiss
+
+	func makeUIViewController(context: Context) -> UIImagePickerController {
+		let picker = UIImagePickerController()
+		picker.sourceType = UIImagePickerController.isSourceTypeAvailable(sourceType) ? sourceType : .photoLibrary
+		picker.delegate = context.coordinator
+		picker.allowsEditing = false
+		return picker
+	}
+
+	func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+	func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+	class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+		let parent: ImagePickerView
+		init(_ parent: ImagePickerView) { self.parent = parent }
+
+		func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+			parent.image = info[.originalImage] as? UIImage
+			parent.dismiss()
+		}
+
+		func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.dismiss() }
 	}
 }
 

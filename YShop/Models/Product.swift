@@ -182,7 +182,7 @@ struct Product: Codable, Identifiable, Hashable {
         if image_url.starts(with: "http") {
             // Replace localhost with actual server IP
             if image_url.contains("localhost:3000") {
-                let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.80:3000"
+                let baseHost = AppConstants.mediaBaseURL
                 let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
                 return image_url.replacingOccurrences(of: "http://localhost:3000", with: cleanBase)
             }
@@ -190,7 +190,7 @@ struct Product: Codable, Identifiable, Hashable {
         }
         
         // If relative path, build full URL
-        let baseHost = AppConstants.baseURLCandidates.first ?? "http://192.168.1.80:3000"
+        let baseHost = AppConstants.mediaBaseURL
         let cleanBase = baseHost.replacingOccurrences(of: "/api/v1", with: "")
         return cleanBase + image_url
     }

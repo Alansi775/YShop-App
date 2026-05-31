@@ -258,6 +258,8 @@ struct OrderTrackingView: View {
             liveMessage = "This order was cancelled."
         case .failed:
             liveMessage = "This order could not be completed."
+        case .returnRequested:
+            liveMessage = "A return has been requested. A driver will pick up the item."
         }
 
         return VStack(alignment: .leading, spacing: 12) {
@@ -842,6 +844,7 @@ extension OrderStatus {
         case .delivered: return "Delivered"
         case .cancelled: return "Cancelled"
         case .failed: return "Failed"
+        case .returnRequested: return "Return"
         }
     }
 
@@ -854,6 +857,7 @@ extension OrderStatus {
         case .outForDelivery: return .green
         case .delivered: return .green
         case .cancelled, .failed: return .red
+        case .returnRequested: return .orange
         }
     }
 
@@ -866,14 +870,15 @@ extension OrderStatus {
         case .outForDelivery: return 3
         case .delivered: return 4
         case .cancelled, .failed: return 0
+        case .returnRequested: return 4
         }
     }
 
     var isTrackable: Bool {
-        self != .delivered && self != .cancelled && self != .failed
+        self != .delivered && self != .cancelled && self != .failed && self != .returnRequested
     }
 
     var isTerminal: Bool {
-        self == .delivered || self == .cancelled || self == .failed
+        self == .delivered || self == .cancelled || self == .failed || self == .returnRequested
     }
 }

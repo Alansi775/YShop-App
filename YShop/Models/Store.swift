@@ -77,15 +77,13 @@ struct Store: Codable, Identifiable {
             return nil 
         }
         
-        let baseURL = "http://192.168.1.80:3000"
-        
+        let baseURL = AppConstants.mediaBaseURL
+
         if iconUrl.starts(with: "http") {
-            print("✅ [STORE] Full URL: \(iconUrl)")
             return iconUrl
         }
-        
+
         let fullURL = iconUrl.starts(with: "/") ? baseURL + iconUrl : baseURL + "/" + iconUrl
-        print("✅ [STORE] Built URL: \(fullURL)")
         return fullURL
     }
 

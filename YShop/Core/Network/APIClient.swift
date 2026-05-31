@@ -153,9 +153,15 @@ enum APIEndpoint {
 
     // MARK: - Returns
     case createReturnRequest
+    case submitReturnRequest
     case getUserReturns
     case getReturnDetail(String)
     case uploadReturnEvidence(String)
+    case cancelOrderReturn(String)
+    case getReturnOrders
+    case getDriverReturnPickups
+    case driverPickedUpReturn(String)
+    case storeReceivedReturn(String)
 
     var path: String {
         switch self {
@@ -264,22 +270,40 @@ enum APIEndpoint {
 
         case .createReturnRequest:
             return "/returns"
+        case .submitReturnRequest:
+            return "/returns/submit"
         case .getUserReturns:
             return "/returns"
         case .getReturnDetail(let id):
             return "/returns/\(id)"
         case .uploadReturnEvidence(let returnId):
             return "/returns/\(returnId)/evidence"
+        case .cancelOrderReturn(let orderId):
+            return "/orders/\(orderId)/status"
+        case .getReturnOrders:
+            return "/returns/list"
+        case .getDriverReturnPickups:
+            return "/returns/driver/pending"
+        case .driverPickedUpReturn(let returnId):
+            return "/returns/\(returnId)/driver-picked-up"
+        case .storeReceivedReturn(let returnId):
+            return "/returns/\(returnId)/store-received"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .login, .signup, .deliverySignup, .deliveryLogin, .verifyEmail, .createProduct,
-                         .addToCart, .checkout, .createOrder, .acceptOffer, .pickupOrder, .deliverOrder,
-               .sendOrderReceipt,
-             .sendAIMessage, .createReturnRequest, .uploadReturnEvidence:
+                case .login, .signup, .deliverySignup, .deliveryLogin, .verifyEmail, .createProduct,
+                                                 .addToCart, .checkout, .createOrder, .acceptOffer, .pickupOrder, .deliverOrder,
+                             .sendOrderReceipt,
+                         .sendAIMessage, .createReturnRequest, .uploadReturnEvidence, .submitReturnRequest:
             return .post
+
+        case .cancelOrderReturn:
+            return .put
+
+                case .driverPickedUpReturn, .storeReceivedReturn:
+                        return .put
 
         case .updateProduct, .updateOrderStatus, .updateCartItem, .updateDriverLocation, .updateDeliveryLocation:
             return .put
@@ -312,7 +336,7 @@ class APIClient {
     private let session: URLSession
     private var baseURL: String
     private let baseURLCandidates: [String]
-    private let requestTimeout: TimeInterval = 10  // ⚡ Reduced from 30s
+    private let requestTimeout: TimeInterval = 5
 
     private init(baseURL: String = "") {
         self.baseURLCandidates = AppConstants.baseURLCandidates
@@ -320,12 +344,29 @@ class APIClient {
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = requestTimeout
-        config.timeoutIntervalForResource = 30  // ⚡ Reduced from 60s
+        config.timeoutIntervalForResource = 30
         config.waitsForConnectivity = false
-        // ⚡ Enable aggressive caching (use cached data if available)
         config.requestCachePolicy = .returnCacheDataElseLoad
 
         self.session = URLSession(configuration: config)
+    }
+
+    // MARK: - Auto-Discovery
+    /// Scans the local subnet for the YShop server and caches the found URL.
+    /// Call once at app launch — runs in background.
+    func discoverServerIfNeeded() {
+        Task.detached(priority: .background) { [weak self] in
+            guard let self else { return }
+            if let found = await ServerDiscovery.findServer() {
+                await MainActor.run {
+                    self.baseURL = found
+                    UserDefaults.standard.set(found, forKey: "lastWorkingAPIURL")
+                    #if DEBUG
+                    print("🔍 [DISCOVERY] Found server at: \(found)")
+                    #endif
+                }
+            }
+        }
     }
 
     // MARK: - Generic Request
@@ -366,6 +407,8 @@ class APIClient {
             #endif
 
             try validateResponse(response, data: data)
+            // Cache the working URL so next launch starts with it
+            UserDefaults.standard.set(baseURL, forKey: "lastWorkingAPIURL")
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             return try decoder.decode(T.self, from: data)
@@ -458,6 +501,59 @@ class APIClient {
         logResponse(response, data: data)
         #endif
 
+        try validateResponse(response, data: data)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(T.self, from: data)
+    }
+
+    // MARK: - Multipart Upload (Multiple Files)
+    struct MultipartFile {
+        let data: Data
+        let fieldName: String
+        let fileName: String
+        let mimeType: String
+    }
+
+    func uploadMultipartFiles<T: Decodable>(
+        _ endpoint: APIEndpoint,
+        parameters: [String: String] = [:],
+        files: [MultipartFile]
+    ) async throws -> T {
+        let url = try buildURL(for: endpoint)
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = 120
+
+        let boundary = UUID().uuidString
+        urlRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        if let token = await AuthManager.shared.token {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        var body = Data()
+        let crlf = "\r\n".data(using: .utf8)!
+
+        for (key, value) in parameters {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n".data(using: .utf8)!)
+            body.append(value.data(using: .utf8)!)
+            body.append(crlf)
+        }
+
+        for file in files {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(file.fieldName)\"; filename=\"\(file.fileName)\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: \(file.mimeType)\r\n\r\n".data(using: .utf8)!)
+            body.append(file.data)
+            body.append(crlf)
+        }
+
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        urlRequest.httpBody = body
+
+        let (data, response) = try await session.data(for: urlRequest)
         try validateResponse(response, data: data)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

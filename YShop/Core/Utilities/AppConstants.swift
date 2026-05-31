@@ -1,27 +1,16 @@
-//
-//  AppConstants.swift
-//  YShop
-//
-//  Created by AI Assistant on 2026-03-14.
-//
-
 import Foundation
 
 struct AppConstants {
     // MARK: - API Configuration
     private static let defaultAPIPrefix = "/api/v1"
-    private static let defaultDeviceHost = "http://192.168.1.80:3000"
-    private static let defaultBonjourHost = "http://mackbook.local:3000"
+    // Fallback IP — updated by start.sh on each server launch
+    private static let defaultDeviceHost = "http://192.168.1.50:3000"
 
-    /// Change backend host in ONE place:
-    /// 1) `API_BASE_URL` env var (full url, highest priority), or
-    /// 2) `API_BASE_HOST` env var / Info.plist value (host only), or
-    /// 3) sensible defaults (simulator -> localhost, device -> LAN IP)
     static let baseURL: String = {
-        return baseURLCandidates.first ?? "http://localhost:3000/api/v1"
+        baseURLCandidates.first ?? "http://localhost:3000/api/v1"
     }()
 
-    /// Ordered candidates; API client can failover between them.
+    /// All candidates tried in order. On device we also try the last cached working URL first.
     static let baseURLCandidates: [String] = {
         var urls: [String] = []
 
@@ -29,28 +18,39 @@ struct AppConstants {
             raw.hasSuffix(defaultAPIPrefix) ? raw : "\(raw)\(defaultAPIPrefix)"
         }
 
+        // 1. Env override (CI / Xcode scheme)
         let envFullURL = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? ""
         if !envFullURL.isEmpty { urls.append(normalized(envFullURL)) }
 
-        let envHost = ProcessInfo.processInfo.environment["API_BASE_HOST"] ?? ""
+        // 2. Info.plist host
         let plistHost = (Bundle.main.object(forInfoDictionaryKey: "API_BASE_HOST") as? String) ?? ""
-        let configHost = !envHost.isEmpty ? envHost : plistHost
-        if !configHost.isEmpty { urls.append(normalized(configHost)) }
+        if !plistHost.isEmpty { urls.append(normalized(plistHost)) }
 
         #if targetEnvironment(simulator)
         urls.append("http://localhost:3000/api/v1")
         #else
+        // 3. Last cached working URL (saved by APIClient after each successful request)
+        if let cached = UserDefaults.standard.string(forKey: "lastWorkingAPIURL"), !cached.isEmpty {
+            urls.insert(normalized(cached), at: 0)
+        }
+        // 4. Fallback IP from build
         urls.append(normalized(defaultDeviceHost))
-        urls.append(normalized(defaultBonjourHost))
         #endif
 
-        // Keep order, remove duplicates
         var unique: [String] = []
-        for url in urls where !unique.contains(url) {
-            unique.append(url)
-        }
+        for url in urls where !unique.contains(url) { unique.append(url) }
         return unique
     }()
+
+    /// Media/uploads host (strips /api/v1). Uses cached URL if available.
+    static var mediaBaseURL: String {
+        let cached = UserDefaults.standard.string(forKey: "lastWorkingAPIURL") ?? ""
+        let apiURL = cached.isEmpty ? (baseURLCandidates.first ?? "http://localhost:3000/api/v1") : cached
+        if let range = apiURL.range(of: "/api/v1") {
+            return String(apiURL[..<range.lowerBound])
+        }
+        return apiURL
+    }
 
     static let apiVersion = "v1"
 
@@ -60,7 +60,7 @@ struct AppConstants {
     static let appBuild = "1"
 
     // MARK: - Timeouts
-    static let requestTimeout: TimeInterval = 30
+    static let requestTimeout: TimeInterval = 5   // short — so failover is fast
     static let resourceTimeout: TimeInterval = 60
 
     // MARK: - Pagination
@@ -73,6 +73,7 @@ struct AppConstants {
         static let userRole = "userRole"
         static let lastLocation = "lastLocation"
         static let appLanguage = "appLanguage"
+        static let lastWorkingAPIURL = "lastWorkingAPIURL"
     }
 
     // MARK: - Feature Flags
@@ -81,7 +82,7 @@ struct AppConstants {
     static let enableOfflineMode = true
 
     // MARK: - Constraints
-    static let maxImageUploadSize: Int = 5 * 1024 * 1024 // 5MB
-    static let maxFileUploadSize: Int = 10 * 1024 * 1024 // 10MB
+    static let maxImageUploadSize: Int = 5 * 1024 * 1024
+    static let maxFileUploadSize: Int = 10 * 1024 * 1024
     static let minPasswordLength = 8
 }

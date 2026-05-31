@@ -1,4 +1,5 @@
 import SwiftUI
+import Kingfisher
 
 struct CategoryStoresView: View {
     let categoryName: String
@@ -163,6 +164,11 @@ struct CategoryStoresView: View {
                 
                 await MainActor.run {
                     self.stores = fetchedStores
+                    let urls = fetchedStores.compactMap {
+                        URL(string: $0.fullIconUrl ?? "")
+                    }
+
+                    ImagePrefetcher(urls: urls).start()
                     self.isLoading = false
                 }
             } catch {
@@ -200,20 +206,11 @@ struct StoreCardView: View {
 
                 // Circular Icon in Center with Border
                 VStack {
-                    if let fullIconUrl = store.fullIconUrl, let url = URL(string: fullIconUrl) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 90, height: 90)
-                                    .clipShape(Circle())
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.black.opacity(0.15), lineWidth: 1.5)
-                                    )
-                            case .empty:
+                    if let fullIconUrl = store.fullIconUrl,
+                       let url = URL(string: fullIconUrl) {
+
+                        KFImage(url)
+                            .placeholder {
                                 ZStack {
                                     Circle()
                                         .fill(Color.white)
@@ -221,27 +218,23 @@ struct StoreCardView: View {
                                             Circle()
                                                 .stroke(Color.black.opacity(0.15), lineWidth: 1.5)
                                         )
+
                                     ProgressView()
                                         .tint(.gray.opacity(0.5))
                                 }
                                 .frame(width: 90, height: 90)
-                            case .failure:
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.gray.opacity(0.1))
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.black.opacity(0.15), lineWidth: 1.5)
-                                        )
-                                    Image(systemName: "storefront.circle.fill")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.gray.opacity(0.5))
-                                }
-                                .frame(width: 90, height: 90)
-                            @unknown default:
-                                EmptyView()
                             }
-                        }
+                            .loadDiskFileSynchronously()
+                            .cacheMemoryOnly(false)
+                            .fade(duration: 0.15)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 90, height: 90)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.black.opacity(0.15), lineWidth: 1.5)
+                            )
                     } else {
                         ZStack {
                             Circle()
