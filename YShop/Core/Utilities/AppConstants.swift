@@ -4,7 +4,7 @@ struct AppConstants {
     // MARK: - API Configuration
     private static let defaultAPIPrefix = "/api/v1"
     // Fallback IP — updated by start.sh on each server launch
-    private static let defaultDeviceHost = "http://192.168.1.50:3000"
+    private static let defaultDeviceHost = "http://10.155.83.72:3000"
 
     static let baseURL: String = {
         baseURLCandidates.first ?? "http://localhost:3000/api/v1"

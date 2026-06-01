@@ -93,17 +93,99 @@ Infrastructure: MySQL database, Firebase integration, AWS S3 for media storage, 
 
 ---
 
-## Screenshots and Demonstrations
+## Screenshots & User Flows
 
-Complete design documentation and screenshots available in the project design system:
+### 🎨 Authentication & Onboarding
+Experience the seamless authentication flow with beautiful UI supporting both light and dark modes.
+
+| Splash Screen | Sign Up (Light) | Sign Up (Dark) |
+|:---:|:---:|:---:|
+| ![Splash](assets/screenshots/01_splash_screen.png) | ![Sign Up Light](assets/screenshots/02_signup_light.png) | ![Sign Up Dark](assets/screenshots/03_signup_dark.png) |
+
+| Sign In | Email Verification |
+|:---:|:---:|
+| ![Sign In](assets/screenshots/04_signin.png) | ![Email Verification](assets/screenshots/05_email_verification.png) |
+
+---
+
+### 🏪 Home & Store Discovery
+Discover thousands of stores across multiple categories with real-time inventory updates.
+
+| Home Page | Featured Stores | Store Listings |
+|:---:|:---:|:---:|
+| ![Home](assets/screenshots/06_home_page.png) | ![Featured](assets/screenshots/07_home_page_featured.png) | ![Stores](assets/screenshots/08_stores_list.png) |
+
+---
+
+### 🛍️ Products & Shopping
+Browse detailed product information with stunning images and intuitive shopping experience.
+
+| Product List 1 | Product List 2 | Product Detail |
+|:---:|:---:|:---:|
+| ![Products 1](assets/screenshots/09_store_products_1.png) | ![Products 2](assets/screenshots/10_store_products_2.png) | ![Product Detail](assets/screenshots/11_product_detail.png) |
+
+| Product Detail 2 | Product Fullscreen | Add to Cart |
+|:---:|:---:|:---:|
+| ![Product 2](assets/screenshots/12_product_detail_2.png) | ![Fullscreen](assets/screenshots/13_product_fullscreen.png) | ![Cart](assets/screenshots/14_cart_review.png) |
+
+---
+
+### 🛒 Checkout & Delivery Options
+Choose your preferred delivery method - standard, express, or drone delivery.
+
+| Cart Review | Delivery Options |
+|:---:|:---:|
+| ![Cart](assets/screenshots/14_cart_review.png) | ![Checkout](assets/screenshots/15_checkout_delivery_option.png) |
+
+---
+
+### 📦 Order Management & Tracking
+Real-time order tracking with live driver location and delivery updates.
+
+| Order Icon | Order Pending | Order Confirmation |
+|:---:|:---:|:---:|
+| ![Icon](assets/screenshots/16_order_tracking_icon.png) | ![Pending](assets/screenshots/17_order_pending.png) | ![Confirmation](assets/screenshots/18_order_confirmation.png) |
+
+| Order Tracking (Live) | Order with Driver | Email Receipt |
+|:---:|:---:|:---:|
+| ![Tracking](assets/screenshots/19_order_tracking_with_driver.png) | ![Driver View](assets/screenshots/20_order_with_driver_home.png) | ![Email](assets/screenshots/24_email_confirmation.png) |
+
+---
+
+### 📋 Order History & Returns
+Manage your orders and process returns with detailed reason tracking and photo evidence.
+
+| Order History | Return Process |
+|:---:|:---:|
+| ![History](assets/screenshots/21_order_history.png) | ![Return](assets/screenshots/22_order_return_process.png) |
+
+---
+
+### 👤 User Profile
+Manage your account, preferences, and delivery addresses.
+
+| Profile Page |
+|:---:|
+| ![Profile](assets/screenshots/23_profile_page.png) |
+
+---
+
+### 🚗 Delivery Driver Experience
+Complete driver workflow from order assignment through delivery completion.
+
+| Waiting for Store | Order Assigned | Route to Store |
+|:---:|:---:|:---:|
+| ![Waiting](assets/screenshots/25_driver_waiting_store.png) | ![Assigned](assets/screenshots/26_driver_order_assigned.png) | ![Route](assets/screenshots/27_driver_to_store_map.png) |
+
+| QR Scan at Store | Near Customer | Driver History |
+|:---:|:---:|:---:|
+| ![QR Scan](assets/screenshots/28_driver_qr_scan_at_store.png) | ![Customer](assets/screenshots/29_driver_near_customer.png) | ![History](assets/screenshots/30_driver_history.png) |
+
+---
+
+### 📚 Complete Documentation
+Additional design documentation and mockups:
 [YShop Design & Implementation - Notion](https://slender-forsythia-e75.notion.site/YShop-E-Commerce-APP-172883fb9e358081adb7d402501eac5f)
-
-The Notion workspace includes:
-- iOS interface mockups and final implementations
-- Flutter application screenshots
-- Component library (liquid glass, navigation, cards)
-- User flow documentation
-- Accessibility guidelines
 
 ---
 
