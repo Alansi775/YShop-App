@@ -108,7 +108,7 @@ Experience the seamless authentication flow with beautiful UI supporting both li
 
 ---
 
-### 🏪 Home & Store Discovery
+### Home & Store Discovery
 Discover thousands of stores across multiple categories with real-time inventory updates.
 
 | Home Page | Featured Stores | Store Listings |
@@ -130,7 +130,7 @@ Browse detailed product information with stunning images and intuitive shopping 
 
 ---
 
-### 🛒 Checkout & Delivery Options
+### Checkout & Delivery Options
 Choose your preferred delivery method - standard, express, or drone delivery.
 
 | Cart Review | Delivery Options |
@@ -201,7 +201,9 @@ YShop implements a proprietary autonomous delivery network utilizing Pixhawk fli
 - Scheduled delivery windows with traffic optimization
 
 ### References
-Drone Delivery System Overview: https://www.youtube.com/watch?v=G9KZVz2MjMk
+Drone Delivery System Overview (Prototybe Drone) auto takeoff test and hover with stibalization: https://youtube.com/shorts/ygoqMg5XZ6c?si=bPaghMPZGsoKCwfE
+Drone Delivery System Overview (Prototybe Drone) manual takeoff test and hover with stibalization: https://youtube.com/shorts/k9V0ieSYL88?si=Y75KrA3fTLqFpz2l
+Drone Delivery System Overview (Simulation): https://www.youtube.com/watch?v=G9KZVz2MjMk
 
 OpenCV Computer Vision Integration: https://www.youtube.com/watch?v=9puBDk01-_s
 
