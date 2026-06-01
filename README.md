@@ -95,7 +95,7 @@ Infrastructure: MySQL database, Firebase integration, AWS S3 for media storage, 
 
 ## Screenshots & User Flows
 
-### 🎨 Authentication & Onboarding
+### Authentication & Onboarding
 Experience the seamless authentication flow with beautiful UI supporting both light and dark modes.
 
 | Splash Screen | Sign Up (Light) | Sign Up (Dark) |
@@ -117,7 +117,7 @@ Discover thousands of stores across multiple categories with real-time inventory
 
 ---
 
-### 🛍️ Products & Shopping
+### Products & Shopping
 Browse detailed product information with stunning images and intuitive shopping experience.
 
 | Product List 1 | Product List 2 | Product Detail |
@@ -139,7 +139,7 @@ Choose your preferred delivery method - standard, express, or drone delivery.
 
 ---
 
-### 📦 Order Management & Tracking
+### Order Management & Tracking
 Real-time order tracking with live driver location and delivery updates.
 
 | Order Icon | Order Pending | Order Confirmation |
@@ -152,7 +152,7 @@ Real-time order tracking with live driver location and delivery updates.
 
 ---
 
-### 📋 Order History & Returns
+### Order History & Returns
 Manage your orders and process returns with detailed reason tracking and photo evidence.
 
 | Order History | Return Process |
@@ -161,7 +161,7 @@ Manage your orders and process returns with detailed reason tracking and photo e
 
 ---
 
-### 👤 User Profile
+### User Profile
 Manage your account, preferences, and delivery addresses.
 
 | Profile Page |
@@ -170,7 +170,7 @@ Manage your account, preferences, and delivery addresses.
 
 ---
 
-### 🚗 Delivery Driver Experience
+### Delivery Driver Experience
 Complete driver workflow from order assignment through delivery completion.
 
 | Waiting for Store | Order Assigned | Route to Store |
@@ -183,7 +183,7 @@ Complete driver workflow from order assignment through delivery completion.
 
 ---
 
-### 📚 Complete Documentation
+### Complete Documentation
 Additional design documentation and mockups:
 [YShop Design & Implementation - Notion](https://slender-forsythia-e75.notion.site/YShop-E-Commerce-APP-172883fb9e358081adb7d402501eac5f)
 
