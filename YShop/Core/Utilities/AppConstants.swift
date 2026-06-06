@@ -4,7 +4,7 @@ struct AppConstants {
     // MARK: - API Configuration
     private static let defaultAPIPrefix = "/api/v1"
     // Fallback IP — updated by start.sh on each server launch
-    private static let defaultDeviceHost = "http://10.155.83.72:3000"
+    private static let defaultDeviceHost = "http://Mohammeds-Mackbook-MacBook-Air.local:3000"
 
     static let baseURL: String = {
         baseURLCandidates.first ?? "http://localhost:3000/api/v1"
@@ -29,11 +29,15 @@ struct AppConstants {
         #if targetEnvironment(simulator)
         urls.append("http://localhost:3000/api/v1")
         #else
-        // 3. Last cached working URL (saved by APIClient after each successful request)
+        // 3. Last cached working URL — skip raw IP addresses (they change per network).
+        //    Only hostname-based URLs (.local, localhost) stay valid across WiFi changes.
         if let cached = UserDefaults.standard.string(forKey: "lastWorkingAPIURL"), !cached.isEmpty {
-            urls.insert(normalized(cached), at: 0)
+            let isRawIP = cached.range(of: #"https?://\d+\.\d+\.\d+\.\d+"#, options: .regularExpression) != nil
+            if !isRawIP {
+                urls.insert(normalized(cached), at: 0)
+            }
         }
-        // 4. Fallback IP from build
+        // 4. Fallback hostname from build
         urls.append(normalized(defaultDeviceHost))
         #endif
 

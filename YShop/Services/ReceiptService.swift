@@ -76,6 +76,20 @@ final class ReceiptService {
                 y += 34
             }
 
+            // Payment method & status
+            let paymentMethod = order.paymentMethod ?? ""
+            let isPayAtDoor = paymentMethod.lowercased() == "pay at door"
+            if !paymentMethod.isEmpty {
+                ("Payment Method: \(paymentMethod)" as NSString).draw(at: CGPoint(x: contentX, y: y), withAttributes: [.font: metaFont])
+                y += 18
+            }
+            let paymentStatusLabel = isPayAtDoor
+                ? "Payment Status: Pending — Pay at Door upon delivery"
+                : "Payment Status: Confirmed"
+            let statusColor = isPayAtDoor ? UIColor(red: 0.6, green: 0.4, blue: 0, alpha: 1) : UIColor(red: 0.1, green: 0.5, blue: 0.1, alpha: 1)
+            (paymentStatusLabel as NSString).draw(at: CGPoint(x: contentX, y: y), withAttributes: [.font: UIFont.boldSystemFont(ofSize: 12), .foregroundColor: statusColor])
+            y += 22
+
             y += 8
 
             // Items header
@@ -156,7 +170,9 @@ final class ReceiptService {
             y += 28
 
             // Footer / small note
-            let note = "This is a payment receipt for your order. Thank you for shopping with YSHOP."
+            let note = isPayAtDoor
+                ? "Payment is due upon delivery. Please have the exact amount ready. Thank you for shopping with YSHOP."
+                : "Payment has been received. Thank you for shopping with YSHOP."
             let noteFont = UIFont.systemFont(ofSize: 11)
             (note as NSString).draw(in: CGRect(x: contentX, y: y, width: contentWidth, height: 60), withAttributes: [.font: noteFont])
         }

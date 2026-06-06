@@ -70,7 +70,7 @@ class StoreUpdateService: ObservableObject {
                 }
                 
                 var request = URLRequest(url: url)
-                request.timeoutInterval = 10
+                request.timeoutInterval = 4
                 
                 let (data, response) = try await URLSession.shared.data(for: request)
                 

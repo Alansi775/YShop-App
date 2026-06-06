@@ -43,7 +43,7 @@ class StoreService {
                 
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
-                request.timeoutInterval = 10
+                request.timeoutInterval = 4
                 
                 let (data, response) = try await URLSession.shared.data(for: request)
                 

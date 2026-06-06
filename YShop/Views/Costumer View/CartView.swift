@@ -1,4 +1,5 @@
 import SwiftUI
+import Kingfisher
 
 struct CartView: View {
     @EnvironmentObject var cartManager: CartManager
@@ -208,13 +209,10 @@ struct CartItemRow: View {
             // صورة المنتج
             Group {
                 if let imageUrl, let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { phase in
-                        if let image = phase.image {
-                            image.resizable().scaledToFill()
-                        } else {
-                            placeholder
-                        }
-                    }
+                    KFImage(url)
+                        .resizable()
+                        .placeholder { placeholder }
+                        .scaledToFill()
                 } else {
                     placeholder
                 }
