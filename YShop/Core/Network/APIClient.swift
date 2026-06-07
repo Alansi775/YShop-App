@@ -163,6 +163,12 @@ enum APIEndpoint {
     case driverPickedUpReturn(String)
     case storeReceivedReturn(String)
 
+    // MARK: - Complaints
+    case submitComplaint
+    case getMyComplaints
+    case getComplaintDetail(Int)
+    case getDriverComplaints
+
     var path: String {
         switch self {
         case .login:
@@ -288,6 +294,14 @@ enum APIEndpoint {
             return "/returns/\(returnId)/driver-picked-up"
         case .storeReceivedReturn(let returnId):
             return "/returns/\(returnId)/store-received"
+        case .submitComplaint:
+            return "/complaints"
+        case .getMyComplaints:
+            return "/complaints/my"
+        case .getComplaintDetail(let id):
+            return "/complaints/\(id)"
+        case .getDriverComplaints:
+            return "/complaints/driver"
         }
     }
 
@@ -296,7 +310,7 @@ enum APIEndpoint {
                 case .login, .signup, .deliverySignup, .deliveryLogin, .verifyEmail, .createProduct,
                                                  .addToCart, .checkout, .createOrder, .acceptOffer, .pickupOrder, .deliverOrder,
                              .sendOrderReceipt,
-                         .sendAIMessage, .createReturnRequest, .uploadReturnEvidence, .submitReturnRequest:
+                         .sendAIMessage, .createReturnRequest, .uploadReturnEvidence, .submitReturnRequest, .submitComplaint:
             return .post
 
         case .cancelOrderReturn:

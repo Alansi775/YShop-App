@@ -199,10 +199,15 @@ struct CartView: View {
 struct CartItemRow: View {
     @EnvironmentObject var cartManager: CartManager
     let item: CartItem
+    @State private var shakeQty = false
 
     private var imageUrl: String? {
         item.fullImageUrl ?? item.product?.fullImageUrl
     }
+
+    private var stockLimit: Int { item.stock ?? Int.max }
+    private var atStockLimit: Bool { item.quantity >= stockLimit }
+    private var isLowStock: Bool { stockLimit > 0 && stockLimit <= 3 }
 
     var body: some View {
         HStack(spacing: 16) {
@@ -244,13 +249,27 @@ struct CartItemRow: View {
                     }
                 }
 
+                // Low-stock warning inline
+                if isLowStock {
+                    HStack(spacing: 5) {
+                        Image(systemName: stockLimit == 1 ? "exclamationmark.circle.fill" : "clock.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(stockLimit == 1 ? .red : .orange)
+                        Text(atStockLimit && stockLimit == 1 ? "Last item in stock!" :
+                             atStockLimit ? "Max available: \(stockLimit)" :
+                             stockLimit == 1 ? "Last item!" : "Only \(stockLimit) left")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(stockLimit == 1 ? .red : .orange)
+                    }
+                }
+
                 HStack(alignment: .bottom) {
                     Text(item.formattedPrice)
                         .font(.system(size: 16, weight: .black))
                         .foregroundColor(.blue)
-                    
+
                     Spacer()
-                    
+
                     // أزرار التحكم بالكمية (Pill Shape)
                     HStack(spacing: 12) {
                         Button(action: {
@@ -261,20 +280,29 @@ struct CartItemRow: View {
                                 .foregroundColor(item.quantity > 1 ? Color(.label) : Color(.tertiaryLabel))
                                 .frame(width: 28, height: 28)
                         }
-                        
+
                         Text("\(item.quantity)")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(Color(.label))
                             .frame(minWidth: 16)
-                        
+                            .offset(x: shakeQty ? 4 : 0)
+
                         Button(action: {
-                            Task { try? await cartManager.updateQuantity(cartItemId: item.id, quantity: item.quantity + 1) }
+                            if atStockLimit {
+                                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                                withAnimation(.spring(response: 0.15, dampingFraction: 0.3)) { shakeQty = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                    withAnimation { shakeQty = false }
+                                }
+                            } else {
+                                Task { try? await cartManager.updateQuantity(cartItemId: item.id, quantity: item.quantity + 1) }
+                            }
                         }) {
                             Image(systemName: "plus")
                                 .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(atStockLimit ? Color(.tertiaryLabel) : .white)
                                 .frame(width: 28, height: 28)
-                                .background(Color.blue)
+                                .background(atStockLimit ? Color(.systemFill) : Color.blue)
                                 .clipShape(Circle())
                         }
                     }

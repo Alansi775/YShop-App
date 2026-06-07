@@ -12,7 +12,11 @@ struct MyOrdersView: View {
 	@State private var errorMessage: String?
 	@State private var selectedOrderId: String?
 	@State private var selectedReturnOrder: Order?
+	@State private var selectedComplaintOrder: Order?
 	@State private var cancelReturnOrder: Order?
+	@State private var complainedOrderIds: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "yshop_complained_orders") ?? [])
+	@State private var complaintsByOrderId: [String: MyComplaint] = [:]
+	@State private var selectedTrackingComplaint: MyComplaint?
 	@State private var showCancelReturnAlert = false
 	@State private var isCancellingReturn = false
 	@State private var showTrackingSheet = false
@@ -71,6 +75,16 @@ struct MyOrdersView: View {
 				Task { await loadOrders() }
 			}
 			.environmentObject(authManager)
+		}
+		.sheet(item: $selectedComplaintOrder) { order in
+			ReportProblemSheet(order: order, store: storesById[order.storeId]) { newComplaint in
+				complainedOrderIds.insert(order.id)
+				complaintsByOrderId[order.id] = newComplaint
+				UserDefaults.standard.set(Array(complainedOrderIds), forKey: "yshop_complained_orders")
+			}
+		}
+		.sheet(item: $selectedTrackingComplaint) { complaint in
+			ComplaintTrackingSheet(complaint: complaint)
 		}
 		.alert("Cancel Return?", isPresented: $showCancelReturnAlert) {
 			Button("Cancel Return", role: .destructive) {
@@ -164,6 +178,9 @@ struct MyOrdersView: View {
 							order: order,
 							store: store,
 							primaryActionTitle: title,
+							windowExpiresAt: policy.expiresAt,
+							complaintSent: complainedOrderIds.contains(order.id),
+							existingComplaint: complaintsByOrderId[order.id],
 							primaryAction: {
 								if order.status.isTrackable {
 									selectedOrderId = order.id
@@ -175,6 +192,12 @@ struct MyOrdersView: View {
 							cancelReturnAction: order.status == .returnRequested ? {
 								cancelReturnOrder = order
 								showCancelReturnAlert = true
+							} : nil,
+							complaintAction: (order.status == .delivered && policy.isWithinWindow && policy.storeType != "clothes") ? {
+								selectedComplaintOrder = order
+							} : nil,
+							trackComplaintAction: complaintsByOrderId[order.id] != nil ? {
+								selectedTrackingComplaint = complaintsByOrderId[order.id]
 							} : nil
 						)
 					}
@@ -225,6 +248,12 @@ struct MyOrdersView: View {
 			errorMessage = error.localizedDescription
 		}
 
+		// Always sync complaint state from backend — decode now handles MySQL int order_id
+		let myComplaints = await ComplaintService.getMyComplaints()
+		let byOrderId = Dictionary(uniqueKeysWithValues: myComplaints.map { ($0.orderId, $0) })
+		complainedOrderIds = Set(myComplaints.map { $0.orderId })
+		complaintsByOrderId = byOrderId
+		UserDefaults.standard.set(Array(complainedOrderIds), forKey: "yshop_complained_orders")
 		isLoading = false
 	}
 
@@ -323,7 +352,7 @@ struct MyOrdersView: View {
 		guard order.status == .delivered else { return "View Order" }
 
 		if policy.isWithinWindow {
-			return policy.storeType == "clothes" ? "Request Return" : "Return / Report"
+			return "Request Return"
 		}
 
 		return "Contact Support"
@@ -341,10 +370,16 @@ struct MyOrderCard: View {
 	let order: Order
 	let store: Store?
 	let primaryActionTitle: String
+	var windowExpiresAt: Date? = nil
+	var complaintSent: Bool = false
+	var existingComplaint: MyComplaint? = nil
 	let primaryAction: () -> Void
 	var cancelReturnAction: (() -> Void)? = nil
+	var complaintAction: (() -> Void)? = nil
+	var trackComplaintAction: (() -> Void)? = nil
 
 	@Environment(\.colorScheme) private var colorScheme
+	@State private var now = Date()
 
 	private var storeType: String {
 		store?.storeType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
@@ -364,13 +399,26 @@ struct MyOrderCard: View {
 	}
 
 	private var policyExpiresAt: Date? {
-		guard let deliveredDate else { return nil }
-		return deliveredDate.addingTimeInterval(policyWindow)
+		windowExpiresAt ?? (deliveredDate.map { $0.addingTimeInterval(policyWindow) })
 	}
 
 	private var isWithinPolicyWindow: Bool {
 		guard let policyExpiresAt else { return false }
-		return Date() < policyExpiresAt
+		return now < policyExpiresAt
+	}
+
+	private var remainingSeconds: Int {
+		guard let exp = policyExpiresAt else { return 0 }
+		return max(0, Int(exp.timeIntervalSince(now)))
+	}
+
+	private var countdownText: String {
+		let s = remainingSeconds
+		if s <= 0 { return storeType == "clothes" ? "Return window expired" : "Report window expired" }
+		let m = s / 60
+		let sec = s % 60
+		let windowLabel = storeType == "clothes" ? "Return window" : "Report window"
+		return "\(windowLabel): \(String(format: "%02d:%02d", m, sec))"
 	}
 
 	var body: some View {
@@ -469,6 +517,7 @@ struct MyOrderCard: View {
 							.foregroundColor(Color(.secondaryLabel))
 							.fixedSize(horizontal: false, vertical: true)
 
+						// Return button (always shown in window)
 						Button(action: primaryAction) {
 							HStack(spacing: 8) {
 								Image(systemName: "arrow.uturn.backward.circle.fill")
@@ -481,12 +530,78 @@ struct MyOrderCard: View {
 							.background(Color.black)
 							.clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 						}
-					} else {
+
+						// Report button — only if no complaint filed yet
+						if existingComplaint == nil, let action = complaintAction {
+							Button(action: action) {
+								HStack(spacing: 8) {
+									Image(systemName: "exclamationmark.bubble.fill")
+									Text("Report a Problem")
+										.font(.system(size: 13, weight: .bold))
+								}
+								.foregroundColor(.white)
+								.frame(maxWidth: .infinity)
+								.frame(height: 44)
+								.background(Color.red.opacity(0.82))
+								.clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+							}
+						}
+					} else if existingComplaint == nil {
 						Text("This order is history only. If you need help, contact YSHOP Support.")
 							.font(.system(size: 11, weight: .regular))
 							.foregroundColor(Color(.secondaryLabel))
 					}
+
+					// Complaint tracking — always visible once a complaint has been filed
+					if let complaint = existingComplaint {
+						let sc = complaintStatusColor(complaint.status)
+						let isResolved = complaint.status == "APPROVED" || complaint.status == "REJECTED"
+						Button(action: { trackComplaintAction?() }) {
+							HStack(spacing: 10) {
+								Image(systemName: isResolved ? "checkmark.message.fill" : "clock.badge.questionmark")
+									.font(.system(size: 14, weight: .semibold))
+								Text(isResolved ? "View Response" : "Track Complaint")
+									.font(.system(size: 13, weight: .bold))
+								Spacer()
+								if !isResolved {
+									Text(complaintStatusLabel(complaint.status))
+										.font(.system(size: 10, weight: .bold))
+										.padding(.horizontal, 8)
+										.padding(.vertical, 4)
+										.background(sc.opacity(0.15))
+										.foregroundColor(sc)
+										.clipShape(Capsule())
+								}
+								Image(systemName: "chevron.right")
+									.font(.system(size: 12, weight: .semibold))
+							}
+							.foregroundColor(sc)
+							.frame(maxWidth: .infinity)
+							.frame(height: 46)
+							.padding(.horizontal, 14)
+							.background(sc.opacity(0.1))
+							.clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+							.overlay(
+								RoundedRectangle(cornerRadius: 14, style: .continuous)
+									.stroke(sc.opacity(0.25), lineWidth: 1)
+							)
+						}
+					}
 				}
+			} else if order.status == .cancelled || order.status == .failed {
+				// Cancelled / failed — no action button, just a status label
+				HStack(spacing: 8) {
+					Image(systemName: order.status == .cancelled ? "xmark.circle.fill" : "exclamationmark.circle.fill")
+						.foregroundColor(order.status == .cancelled ? .red : .orange)
+					Text(order.status == .cancelled ? "Order Cancelled" : "Order Failed")
+						.font(.system(size: 13, weight: .semibold))
+						.foregroundColor(order.status == .cancelled ? .red : .orange)
+				}
+				.frame(maxWidth: .infinity, alignment: .leading)
+				.padding(.horizontal, 14)
+				.padding(.vertical, 12)
+				.background((order.status == .cancelled ? Color.red : Color.orange).opacity(0.07))
+				.clipShape(RoundedRectangle(cornerRadius: 12))
 			} else {
 				Button(action: primaryAction) {
 					HStack(spacing: 8) {
@@ -505,15 +620,12 @@ struct MyOrderCard: View {
 		.padding(14)
 		.background(Color(.secondarySystemBackground))
 		.clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-	}
-
-	private var policyWindowText: String {
-		if storeType == "clothes" {
-			return isWithinPolicyWindow ? "Return window: 3 days" : "Return window expired after 3 days"
+		.onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { t in
+			now = t
 		}
-
-		return isWithinPolicyWindow ? "Return / support window: 30 minutes" : "Support window expired after 30 minutes"
 	}
+
+	private var policyWindowText: String { countdownText }
 
 	private var policyHintText: String {
 		if storeType == "clothes" {
@@ -523,7 +635,7 @@ struct MyOrderCard: View {
 			return "For cash orders, support is available shortly after delivery."
 		}
 
-		return "If there is a missing item or issue, contact YSHOP Support within 30 minutes."
+		return "If there is a missing item or issue with your order, report it within 30 minutes."
 	}
 
 	private func parseDate(_ rawValue: String?) -> Date? {
@@ -545,6 +657,33 @@ struct MyOrderCard: View {
 
 		return nil
 	}
+
+	private func complaintStatusColor(_ s: String) -> Color {
+		switch s {
+		case "APPROVED":     return .green
+		case "REJECTED":     return .red
+		case "UNDER_REVIEW": return Color(red: 0.23, green: 0.51, blue: 0.98)
+		default:             return .orange
+		}
+	}
+
+	private func complaintStatusLabel(_ s: String) -> String {
+		switch s {
+		case "APPROVED":     return "Approved"
+		case "REJECTED":     return "Rejected"
+		case "UNDER_REVIEW": return "Under Review"
+		default:             return "Pending"
+		}
+	}
+
+	private func complaintStatusIcon(_ s: String) -> String {
+		switch s {
+		case "APPROVED":     return "checkmark.circle.fill"
+		case "REJECTED":     return "xmark.circle.fill"
+		case "UNDER_REVIEW": return "magnifyingglass.circle.fill"
+		default:             return "clock.fill"
+		}
+	}
 }
 
 // MARK: - Return Request Sheet (3-Step Wizard)
@@ -563,8 +702,21 @@ struct ReturnRequestSheet: View {
 	@State private var showLibraryPicker = false
 	@State private var isSubmitting = false
 	@State private var errorMessage: String?
+	@State private var now = Date()
 
 	private let photoLabels = ["top", "bottom", "left", "right", "front", "back"]
+
+	private func windowRemaining(for order: Order) -> String {
+		guard let raw = order.deliveredAt else { return "" }
+		let fmts = ["yyyy-MM-dd'T'HH:mm:ss.SSSZ", "yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd HH:mm:ss"]
+		let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+		var delivered: Date? = nil
+		for fmt in fmts { f.dateFormat = fmt; if let d = f.date(from: raw) { delivered = d; break } }
+		guard let d = delivered else { return "" }
+		let secs = max(0, Int(d.addingTimeInterval(30 * 60).timeIntervalSince(now)))
+		if secs == 0 { return "Window expired" }
+		return String(format: "Return window: %02d:%02d remaining", secs / 60, secs % 60)
+	}
 	private var isReasonValid: Bool { reason.trimmingCharacters(in: .whitespacesAndNewlines).count >= 10 }
 	private var allPhotosAdded: Bool { photos.count == 6 }
 	private var canProceed: Bool {
@@ -578,6 +730,23 @@ struct ReturnRequestSheet: View {
 	var body: some View {
 		NavigationStack {
 			VStack(spacing: 0) {
+				// Countdown timer bar
+				let countdown = windowRemaining(for: order)
+				if !countdown.isEmpty {
+					HStack(spacing: 8) {
+						Image(systemName: "clock.fill")
+							.font(.system(size: 12))
+							.foregroundColor(.orange)
+						Text(countdown)
+							.font(.system(size: 12, weight: .semibold))
+							.foregroundColor(.orange)
+						Spacer()
+					}
+					.padding(.horizontal, 20)
+					.padding(.vertical, 8)
+					.background(Color.orange.opacity(0.08))
+				}
+
 				progressBar
 					.padding(.horizontal, 20)
 					.padding(.top, 8)
@@ -608,6 +777,7 @@ struct ReturnRequestSheet: View {
 				}
 			}
 		}
+		.onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { t in now = t }
 		.sheet(isPresented: $showCameraPicker) {
 			if let label = activePhotoLabel {
 				ImagePickerView(
@@ -649,6 +819,7 @@ struct ReturnRequestSheet: View {
 	private var reasonStep: some View {
 		ScrollView(showsIndicators: false) {
 			VStack(alignment: .leading, spacing: 20) {
+				Color.clear.frame(height: 0) // tap target for keyboard dismiss
 				VStack(alignment: .leading, spacing: 6) {
 					Text("Why are you returning this?")
 						.font(.system(size: 20, weight: .bold))
@@ -686,7 +857,12 @@ struct ReturnRequestSheet: View {
 				}
 			}
 			.padding(20)
+			.contentShape(Rectangle())
+			.onTapGesture {
+				UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+			}
 		}
+		.scrollDismissesKeyboard(.interactively)
 	}
 
 	// MARK: - Step 2: Photos
@@ -848,6 +1024,7 @@ struct ReturnRequestSheet: View {
 			}
 
 			Button {
+				UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 				if step < 2 {
 					withAnimation { step += 1 }
 				} else {

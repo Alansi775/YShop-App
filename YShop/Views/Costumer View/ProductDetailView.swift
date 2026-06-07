@@ -16,6 +16,7 @@ struct ProductDetailView: View {
     @State private var isLiked: Bool = false
     @State private var showAddedToCart: Bool = false
     @State private var showCartSheet: Bool = false
+    @State private var shakeQty: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -303,7 +304,25 @@ struct ProductDetailView: View {
     }
     
     private var bottomAddToCartBar: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
+            // Last-item / stock warning
+            if product.stock > 0 && product.stock <= 3 {
+                HStack(spacing: 6) {
+                    Image(systemName: product.stock == 1 ? "exclamationmark.circle.fill" : "clock.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(product.stock == 1 ? .red : .orange)
+                    Text(product.stock == 1 ? "Last item in stock!" : "Only \(product.stock) left")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(product.stock == 1 ? .red : .orange)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background((product.stock == 1 ? Color.red : Color.orange).opacity(0.1))
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke((product.stock == 1 ? Color.red : Color.orange).opacity(0.3), lineWidth: 1))
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
             HStack {
                 // Quantity Selector (Pill Style)
                 HStack(spacing: 16) {
@@ -312,12 +331,24 @@ struct ProductDetailView: View {
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(quantity > 1 ? Color(.label) : Color(.tertiaryLabel))
                     }
-                    
+
                     Text("\(quantity)")
                         .font(.system(size: 16, weight: .semibold))
                         .frame(minWidth: 24, alignment: .center)
-                    
-                    Button(action: { if quantity < product.stock { quantity += 1 } }) {
+                        .offset(x: shakeQty ? 4 : 0)
+
+                    Button(action: {
+                        if quantity < product.stock {
+                            quantity += 1
+                        } else {
+                            // At limit — shake + haptic
+                            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                            withAnimation(.spring(response: 0.15, dampingFraction: 0.3)) { shakeQty = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                withAnimation { shakeQty = false }
+                            }
+                        }
+                    }) {
                         Image(systemName: "plus")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(quantity < product.stock ? Color(.label) : Color(.tertiaryLabel))

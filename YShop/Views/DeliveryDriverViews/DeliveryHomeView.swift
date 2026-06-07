@@ -22,6 +22,8 @@ struct DeliveryHomeView: View {
     @State private var showProfileSheet = false
     @State private var showDashboard = false
     @State private var showReturnPickups = false
+    @State private var showComplaints = false
+    @State private var complaintCount = 0
     @State private var pulseAnimation = false
     @State private var returnBadgeCount = 0
 
@@ -61,7 +63,7 @@ struct DeliveryHomeView: View {
                         Button {
                             showReturnPickups = true
                         } label: {
-                            ZStack(alignment: .topTrailing) {
+                            HStack(spacing: 4) {
                                 Image(systemName: "arrow.uturn.backward.circle.fill")
                                     .foregroundColor(DeliveryTheme.accentOrange)
                                 if returnBadgeCount > 0 {
@@ -70,8 +72,23 @@ struct DeliveryHomeView: View {
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 5)
                                         .padding(.vertical, 2)
-                                        .background(Color.red, in: Capsule())
-                                        .offset(x: 10, y: -8)
+                                        .background(DeliveryTheme.accentBlue, in: Capsule())
+                                }
+                            }
+                        }
+                        Button {
+                            showComplaints = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.bubble.fill")
+                                    .foregroundColor(complaintCount > 0 ? DeliveryTheme.accentBlue : DeliveryTheme.secondaryText)
+                                if complaintCount > 0 {
+                                    Text(complaintCount > 9 ? "9+" : "\(complaintCount)")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 2)
+                                        .background(DeliveryTheme.accentBlue, in: Capsule())
                                 }
                             }
                         }
@@ -102,6 +119,9 @@ struct DeliveryHomeView: View {
             }
             .sheet(isPresented: $showReturnPickups) {
                 DeliveryReturnView()
+            }
+            .sheet(isPresented: $showComplaints) {
+                DriverComplaintsView()
             }
             .sheet(item: $pendingOffer) { offer in
                 DeliveryOfferSheet(
@@ -458,6 +478,7 @@ struct DeliveryHomeView: View {
 
             await refreshActiveOrderState()
             await refreshReturnBadgeCount()
+            await refreshComplaintCount()
 
             if profile.isWorking && profile.isApproved {
                 startLocationTracking()
@@ -748,6 +769,13 @@ private func stopOrderSocketObserver() {
                 returnBadgeCount = 0
             }
         }
+    }
+
+    private func refreshComplaintCount() async {
+        struct _Resp: Decodable { let success: Bool; let data: [_Item]?; struct _Item: Decodable { let id: Int } }
+        guard let resp = try? await (APIClient.shared.request(.getDriverComplaints) as _Resp) else { return }
+        let count = resp.data?.count ?? 0
+        await MainActor.run { complaintCount = count }
     }
 }
 
