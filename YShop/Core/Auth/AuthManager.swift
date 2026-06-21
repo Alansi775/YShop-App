@@ -306,9 +306,14 @@ class AuthManager: NSObject, ObservableObject {
 
     func refreshCurrentUser() async {
         guard let token = self.token else {
-            print("❌ [AUTH] No token to refresh user")
-            self.isLoggedIn = false
-            self.currentUser = nil
+            // Token may be transiently unreadable (device still locking/unlocking).
+            // Only sign out if we were never logged in — don't clear a valid session.
+            if self.currentUser == nil {
+                print("🚪 [AUTH] No token and no cached user — not logged in")
+                self.isLoggedIn = false
+            } else {
+                print("⚠️ [AUTH] Token temporarily unreadable — keeping session alive")
+            }
             return
         }
 

@@ -68,6 +68,7 @@ struct Order: Codable, Identifiable {
     let storeLatitude: Double?
     let storeLongitude: Double?
     let storeIconUrl: String?
+    let storeType: String?
 
     init(
         id: String,
@@ -95,7 +96,8 @@ struct Order: Codable, Identifiable {
         customerLongitude: Double? = nil,
         storeLatitude: Double? = nil,
         storeLongitude: Double? = nil,
-        storeIconUrl: String? = nil
+        storeIconUrl: String? = nil,
+        storeType: String? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -123,6 +125,7 @@ struct Order: Codable, Identifiable {
         self.storeLatitude = storeLatitude
         self.storeLongitude = storeLongitude
         self.storeIconUrl = storeIconUrl
+        self.storeType = storeType
     }
     
     enum CodingKeys: String, CodingKey {
@@ -150,6 +153,7 @@ struct Order: Codable, Identifiable {
         case storeLatitude = "store_latitude"
         case storeLongitude = "store_longitude"
         case storeIconUrl = "store_icon_url"
+        case storeType = "store_type"
     }
 
     enum AltCodingKeys: String, CodingKey {
@@ -222,6 +226,7 @@ struct Order: Codable, Identifiable {
             ?? (try? altContainer.decodeIfPresent(String.self, forKey: .storeName))
 
         storeIconUrl = (try? container.decodeIfPresent(String.self, forKey: .storeIconUrl))
+        storeType = (try? container.decodeIfPresent(String.self, forKey: .storeType))
 
         phone = (try? container.decodeIfPresent(String.self, forKey: .phone))
             ?? (try? altContainer.decodeIfPresent(String.self, forKey: .customerPhone))

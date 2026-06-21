@@ -164,12 +164,7 @@ struct ProfileSheetView: View {
                             ProfileOptionRow(icon: "heart.fill", title: "Saved Items", iconBgColor: .pink)
                             customDivider
                             
-                            Button(action: {
-                                isPresented = false
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                                    onMyOrders()
-                                }
-                            }) {
+                            Button(action: onMyOrders) {
                                 ProfileOptionRow(icon: "bag.fill", title: "My Orders", iconBgColor: .orange)
                             }
                             .buttonStyle(.plain)

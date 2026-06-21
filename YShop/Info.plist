@@ -11,6 +11,10 @@
 	</dict>
 	<key>YSHOP_TTS_KEY</key>
 	<string>$(YSHOP_TTS_KEY)</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>YShop AI Assistant uses your microphone to understand voice requests</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

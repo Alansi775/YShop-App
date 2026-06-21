@@ -3,7 +3,13 @@ import UIKit
 
 struct MyOrdersView: View {
 	@EnvironmentObject private var authManager: AuthManager
-	@Environment(\.dismiss) private var dismiss
+	// Direct binding instead of @Environment(\.dismiss) — avoids inheriting the
+	// outer NavigationView's pop action instead of closing the sheet.
+	@Binding var isPresented: Bool
+
+	init(isPresented: Binding<Bool> = .constant(false)) {
+		self._isPresented = isPresented
+	}
 
 	@State private var selectedTab = "All"
 	@State private var orders: [Order] = []
@@ -52,7 +58,7 @@ struct MyOrdersView: View {
 			ToolbarItem(placement: .topBarLeading) {
 				NativeCircleIconButton(
 					systemName: "chevron.left",
-					action: { dismiss() },
+					action: { isPresented = false },
 					iconColor: .primary,
 					size: 35.5,
 					iconSize: 14,

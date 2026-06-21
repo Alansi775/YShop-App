@@ -136,9 +136,13 @@ struct AIShoppingView: View {
 
     private var welcomeView: some View {
         VStack(spacing: 32) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 48, weight: .light))
-                .foregroundColor(accentBlue)
+            // Y monogram — same as HomeView AI bar
+            Text("Y")
+                .font(.system(size: 28, weight: .black))
+                .foregroundStyle(.white)
+                .frame(width: 64, height: 64)
+                .background(Circle().fill(Color.white.opacity(0.13)))
+                .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: 1.5))
 
             VStack(spacing: 8) {
                 Text("YShop AI")
@@ -276,9 +280,12 @@ struct AIShoppingView: View {
     private var bottomBar: some View {
         HStack(spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 13))
-                    .foregroundColor(accentBlue.opacity(0.7))
+                Text("Y")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(accentBlue.opacity(0.8)))
+                    .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 0.8))
 
                 TextField(
                     manager.isListening ? "Listening..." : "Ask me anything...",

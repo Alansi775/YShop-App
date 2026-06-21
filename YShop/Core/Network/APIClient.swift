@@ -128,6 +128,7 @@ enum APIEndpoint {
     case sendOrderReceipt(String)
     case updateOrderStatus(String)
     case cancelOrder(String)
+    case saveLiveActivityToken(String)
 
     // MARK: - Delivery
     case getDriverProfile
@@ -229,6 +230,8 @@ enum APIEndpoint {
             return "/orders/user"
         case .getOrderDetail(let id):
             return "/orders/\(id)"
+        case .saveLiveActivityToken(let id):
+            return "/orders/\(id)/live-activity-token"
         case .sendOrderReceipt(let id):
             return "/orders/\(id)/receipt"
         case .updateOrderStatus(let id):
@@ -311,6 +314,9 @@ enum APIEndpoint {
                                                  .addToCart, .checkout, .createOrder, .acceptOffer, .pickupOrder, .deliverOrder,
                              .sendOrderReceipt,
                          .sendAIMessage, .createReturnRequest, .uploadReturnEvidence, .submitReturnRequest, .submitComplaint:
+            return .post
+
+        case .saveLiveActivityToken:
             return .post
 
         case .cancelOrderReturn:

@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UserNotifications
 
 struct OrderTrackingView: View {
     let orderId: String
@@ -23,6 +24,7 @@ struct OrderTrackingView: View {
     @State private var liveETA: String?
     @State private var liveDistanceMeters: Double = 0
     @State private var periodicRefreshTask: Task<Void, Never>?
+    @State private var didSendProximityAlert = false
     @State private var allowAutoMapUpdates = true
 
     var body: some View {
@@ -84,6 +86,10 @@ struct OrderTrackingView: View {
             cartManager.setActiveTrackingOrder(loadedOrder)
             await loadStoreDetails(storeId: loadedOrder.storeId)
             await updateRoutePolyline(for: loadedOrder, driverLocation: liveDriverLocation)
+            // Start Live Activity when tracking view opens for an active order
+            if !loadedOrder.status.isTerminal {
+                LiveActivityManager.shared.start(for: loadedOrder)
+            }
         } catch {
             errorMessage = error.localizedDescription
             order = nil
@@ -98,10 +104,23 @@ struct OrderTrackingView: View {
             let loadedOrder = try await OrderService.getOrderDetail(id: orderId)
             liveDriverLocation = loadedOrder.driverLocation ?? liveDriverLocation
 
-            if order?.status != loadedOrder.status || order?.updatedAt != loadedOrder.updatedAt {
+            let previousStatus = order?.status
+            if previousStatus != loadedOrder.status || order?.updatedAt != loadedOrder.updatedAt {
                 withAnimation(.easeInOut(duration: 0.25)) {
                     order = loadedOrder
                 }
+                // Keep Live Activity in sync with every status change
+                if loadedOrder.status.isTerminal {
+                    LiveActivityManager.shared.end(with: loadedOrder)
+                } else {
+                    LiveActivityManager.shared.update(with: loadedOrder)
+                }
+                // Local notification for key status transitions
+                sendStatusChangeNotification(
+                    newStatus: loadedOrder.status,
+                    previousStatus: previousStatus,
+                    order: loadedOrder
+                )
             } else {
                 order = loadedOrder
             }
@@ -174,6 +193,83 @@ struct OrderTrackingView: View {
         guard let currentOrder = order else { return }
         await updateRoutePolyline(for: currentOrder, driverLocation: driverLocation)
         updateMapPosition()
+        checkDriverProximity(driverLocation: driverLocation, order: currentOrder)
+    }
+
+    private func checkDriverProximity(driverLocation: String, order: Order) {
+        guard !didSendProximityAlert,
+              order.status == .outForDelivery || order.status == .shipped
+        else { return }
+
+        guard let parts = driverLocation.split(separator: ",").map({ Double($0.trimmingCharacters(in: .whitespaces)) }) as? [Double?],
+              parts.count >= 2,
+              let dLat = parts[0], let dLng = parts[1]
+        else { return }
+
+        guard let customerLat = order.customerLatitude, let customerLng = order.customerLongitude else { return }
+
+        let driverCL  = CLLocation(latitude: dLat, longitude: dLng)
+        let customerCL = CLLocation(latitude: customerLat, longitude: customerLng)
+        let distance   = driverCL.distance(from: customerCL)
+
+        guard distance < 600 else { return }
+        didSendProximityAlert = true
+
+        let content = UNMutableNotificationContent()
+        content.title = "Your order is almost here! 🛵"
+        content.body  = "Driver is less than 600m away. Get ready to receive your order."
+        content.sound = .defaultCritical
+        let request = UNNotificationRequest(
+            identifier: "proximity-\(orderId)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    private func sendStatusChangeNotification(
+        newStatus: OrderStatus,
+        previousStatus: OrderStatus?,
+        order: Order
+    ) {
+        guard newStatus != previousStatus else { return }
+
+        let store = order.storeName ?? "your store"
+        var title: String?
+        var body: String?
+
+        switch newStatus {
+        case .confirmed:
+            title = "✅ Order Confirmed"
+            body  = "\(store) confirmed your order and started preparing it."
+        case .shipped, .outForDelivery:
+            title = "🛵 Driver is on the way!"
+            body  = "Your order from \(store) has been picked up. Track it live."
+        case .delivered:
+            title = "🎉 Order Delivered!"
+            body  = "Your order from \(store) has arrived. Enjoy!"
+        case .cancelled:
+            title = "❌ Order Cancelled"
+            body  = "Your order from \(store) was cancelled."
+        case .failed:
+            title = "⚠️ Order Failed"
+            body  = "There was a problem with your order from \(store)."
+        default:
+            return
+        }
+
+        guard let title, let body else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body  = body
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "status-\(orderId)-\(newStatus)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     private func stopTrackingSession() {

@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import AppIntents
+import UserNotifications
 
 @main
 struct YShopApp: App {
@@ -17,6 +19,8 @@ struct YShopApp: App {
 
     init() {
         UIFont.registerCustomFonts()
+        YShopShortcutsProvider.updateAppShortcutParameters()
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
     var body: some Scene {

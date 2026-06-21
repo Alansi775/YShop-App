@@ -73,7 +73,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showMyOrdersSheet) {
             NavigationStack {
-                MyOrdersView()
+                MyOrdersView(isPresented: $showMyOrdersSheet)
                     .environmentObject(authManager)
                     .environmentObject(cartManager)
             }
@@ -198,26 +198,9 @@ struct HomeView: View {
 
                 Spacer()
 
-                // AI Ask Button
-                Button(action: { showAISheet = true }) {
-                    HStack {
-                        Image(systemName: "sparkles").foregroundColor(.white)
-                        Text("Ask me anything...")
-                            .foregroundColor(.white.opacity(0.7))
-                            .font(.system(size: 16))
-                        Spacer()
-                        Image(systemName: "mic")
-                            .foregroundColor(.white.opacity(0.5))
-                            .font(.system(size: 14))
-                    }
-                    .padding(12)
-                    .background(Color.white.opacity(0.15))
-                    .backdrop()
-                    .cornerRadius(14)
-                    .frame(maxWidth: 280)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 40)
+                // AI Ask Bar
+                AIAskBar { showAISheet = true }
+                    .padding(.horizontal, 24)
 
                 Spacer()
 
@@ -262,6 +245,103 @@ struct HomeView: View {
     }
 }
 
+// MARK: - AI Ask Bar
+
+private struct AIAskBar: View {
+    let action: () -> Void
+    private static let borderCycle: Double = 7.0
+    // Total flash cycle: 5.5s — beam sweeps for first 2s then rests 3.5s
+    private static let flashCycle:  Double = 5.5
+    private static let flashActive: Double = 2.0   // sweep portion of the cycle
+
+    var body: some View {
+        TimelineView(.animation) { ctx in
+            let t = ctx.date.timeIntervalSinceReferenceDate
+            let borderAngle = (t.truncatingRemainder(dividingBy: Self.borderCycle) / Self.borderCycle) * 360
+            // Raw position in current flash cycle (0…1)
+            let cyclePos = t.truncatingRemainder(dividingBy: Self.flashCycle) / Self.flashCycle
+            // Beam only active during first flashActive/flashCycle fraction
+            let activeRatio = Self.flashActive / Self.flashCycle
+            let beamT: Double = cyclePos < activeRatio ? cyclePos / activeRatio : 1.0
+            // Ease-in-out so the beam feels like light glancing across a surface
+            let eased = beamT < 0.5
+                ? 2 * beamT * beamT
+                : 1 - pow(-2 * beamT + 2, 2) / 2
+            barFace(borderAngle: borderAngle, beamEased: eased, beamVisible: cyclePos < activeRatio)
+        }
+        .transaction { $0.animation = nil }
+    }
+
+    private func barFace(borderAngle: Double, beamEased: Double, beamVisible: Bool) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Text("Y")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(Color.white.opacity(0.12)))
+                    .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ask me anything")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text("YShop AI")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.42))
+                }
+
+                Spacer()
+
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.white.opacity(0.28))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(Color.white.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            // Flash beam — only rendered during active sweep window
+            .overlay(
+                GeometryReader { geo in
+                    if beamVisible {
+                        let beamW: CGFloat = 120
+                        let x = beamEased * (geo.size.width + beamW * 2) - beamW
+                        LinearGradient(
+                            colors: [.clear, .white.opacity(0.09), .white.opacity(0.17), .white.opacity(0.09), .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: beamW)
+                        .frame(maxHeight: .infinity)
+                        .offset(x: x)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            )
+            // Rotating border
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                .clear, .clear, .clear,
+                                Color.white.opacity(0.14),
+                                Color.white.opacity(0.78),
+                                Color.white.opacity(0.14),
+                                .clear, .clear,
+                            ],
+                            center: .center,
+                            angle: .degrees(borderAngle)
+                        ),
+                        lineWidth: 1.0
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Explore Button
 
 private struct ExploreButton: View {
@@ -269,12 +349,15 @@ private struct ExploreButton: View {
     private static let cycleDuration: Double = 10.0
 
     var body: some View {
-        // TimelineView drives angle from real clock time — never resets on tab swap
+        // TimelineView drives angle from real clock time — never resets on tab swap.
+        // .transaction strips any withAnimation() calls from parent views so the
+        // gradient update is always instant and never gets caught in a spring/ease.
         TimelineView(.animation) { ctx in
             let phase = ctx.date.timeIntervalSinceReferenceDate
                 .truncatingRemainder(dividingBy: Self.cycleDuration) / Self.cycleDuration
             buttonFace(angle: phase * 360.0)
         }
+        .transaction { $0.animation = nil }
     }
 
     private func buttonFace(angle: Double) -> some View {

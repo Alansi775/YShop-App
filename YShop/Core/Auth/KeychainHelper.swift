@@ -17,18 +17,23 @@ class KeychainHelper {
 
     // MARK: - Save
     func save(_ data: Data, for key: String) throws {
-        let query: [String: Any] = [
+        // Delete with search-only attributes (no kSecValueData in delete query)
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        // kSecAttrAccessibleAfterFirstUnlock: readable in background after first boot-unlock
+        let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
-
-        // Delete existing item if present
-        SecItemDelete(query as CFDictionary)
-
-        // Add new item
-        let status = SecItemAdd(query as CFDictionary, nil)
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw KeychainError.savingFailed
         }
