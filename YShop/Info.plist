@@ -9,6 +9,12 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>YSHOP_TTS_KEY</key>
+	<string>$(YSHOP_TTS_KEY)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>YShop AI Assistant uses your microphone to understand voice requests</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>YShop AI Assistant converts your voice to text to answer shopping questions</string>
 	<key>NSCameraUsageDescription</key>
 	<string>YSHOP needs camera access to scan the store QR code for pickup verification</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

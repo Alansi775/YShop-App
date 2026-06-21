@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		DE2DE2492FCBBB3F000004DA /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = DE2DE2482FCBBB3F000004DA /* Kingfisher */; };
+		DED1B3DB2FE6FC5500D7CD3C /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = DED1B3DA2FE6FC5500D7CD3C /* Secrets.xcconfig */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -31,6 +32,7 @@
 		B3110AD52D1DA1B200619E9A /* YShop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YShop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B3110AE52D1DA1B300619E9A /* YShopTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YShopTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B3110AEF2D1DA1B300619E9A /* YShopUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YShopUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DED1B3DA2FE6FC5500D7CD3C /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -97,6 +99,7 @@
 				B3110AE82D1DA1B300619E9A /* YShopTests */,
 				B3110AF22D1DA1B300619E9A /* YShopUITests */,
 				B3110AD62D1DA1B200619E9A /* Products */,
+				DED1B3DA2FE6FC5500D7CD3C /* Secrets.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -230,6 +233,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DED1B3DB2FE6FC5500D7CD3C /* Secrets.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -289,6 +293,7 @@
 /* Begin XCBuildConfiguration section */
 		B3110AF72D1DA1B300619E9A /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = DED1B3DA2FE6FC5500D7CD3C /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -352,6 +357,7 @@
 		};
 		B3110AF82D1DA1B300619E9A /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = DED1B3DA2FE6FC5500D7CD3C /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;

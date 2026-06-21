@@ -1,121 +1,144 @@
 import SwiftUI
 
+// MARK: - Tab Enum
+
+enum AppTab: String, Hashable, CaseIterable {
+    case home    = "home"
+    case search  = "search"
+    case cart    = "cart"
+    case orders  = "orders"
+    case profile = "profile"
+}
+
+// MARK: - CustomerTabView
+
 struct CustomerTabView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var cartManager: CartManager
-    @State private var selectedTab = 0
-    
-    var body: some View {
-        ZStack {
-            // Background
-            Color(.systemBackground)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // Tab Content
-                Group {
-                    switch selectedTab {
-                    case 0:
-                        HomeView()
-                    case 1:
-                        SearchView()
-                    case 2:
-                        CartView()
-                    case 3:
-                        OrdersView()
-                    case 4:
-                        ProfileView()
-                    default:
-                        HomeView()
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                
-                // Bottom Tab Bar
-                Divider()
-                
-                HStack(spacing: 0) {
-                    TabBarItem(
-                        icon: "house.fill",
-                        label: "Home",
-                        isSelected: selectedTab == 0,
-                        action: { selectedTab = 0 }
-                    )
-                    
-                    TabBarItem(
-                        icon: "magnifyingglass",
-                        label: "Search",
-                        isSelected: selectedTab == 1,
-                        action: { selectedTab = 1 }
-                    )
-                    
-                    TabBarItem(
-                        icon: "bag.fill",
-                        label: "Cart",
-                        isSelected: selectedTab == 2,
-                        action: { selectedTab = 2 }
-                    )
-                    
-                    TabBarItem(
-                        icon: "list.bullet.rectangle.fill",
-                        label: "Orders",
-                        isSelected: selectedTab == 3,
-                        action: { selectedTab = 3 }
-                    )
-                    
-                    TabBarItem(
-                        icon: "person.fill",
-                        label: "Profile",
-                        isSelected: selectedTab == 4,
-                        action: { selectedTab = 4 }
-                    )
-                }
-                .frame(height: 60)
-                .background(Color(.systemBackground))
-                .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: -2)
-            }
+    @State private var selectedTab: AppTab = .home
 
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    TrackingOrderFloatingButton()
-                        .padding(.trailing, 18)
-                        .padding(.bottom, 76)
-                }
+    var body: some View {
+        Group {
+            if #available(iOS 18.0, *) {
+                nativeTabView
+            } else {
+                legacyTabView
             }
         }
-        .onChange(of: cartManager.pendingTrackingOrderId) { pendingOrderId in
-            guard pendingOrderId != nil else { return }
-            selectedTab = 0
+        .onChange(of: cartManager.pendingTrackingOrderId) { id in
+            guard id != nil else { return }
+            selectedTab = .home
         }
     }
-}
 
-struct TabBarItem: View {
-    let icon: String
-    let label: String
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: .medium))
-                
-                Text(label)
-                    .font(.system(size: 11, weight: .semibold))
+    // MARK: iOS 18+ — Native floating tab bar (sidebarAdaptable)
+
+    @available(iOS 18.0, *)
+    private var nativeTabView: some View {
+        TabView(selection: $selectedTab) {
+
+            Tab("Home", systemImage: "house", value: AppTab.home) {
+                NavigationStack {
+                    HomeView()
+                        .environmentObject(authManager)
+                        .environmentObject(cartManager)
+                }
             }
-            .foregroundColor(isSelected ? Color(.label) : Color(.secondaryLabel))
-            .frame(maxWidth: .infinity)
-            .frame(height: 60)
+
+            Tab(value: AppTab.search, role: .search) {
+                NavigationStack {
+                    SearchView()
+                        .environmentObject(authManager)
+                        .environmentObject(cartManager)
+                }
+            }
+
+            Tab("Cart", systemImage: "bag", value: AppTab.cart) {
+                NavigationStack {
+                    CartView()
+                        .environmentObject(authManager)
+                        .environmentObject(cartManager)
+                }
+            }
+            .badge(cartManager.itemCount > 0 ? cartManager.itemCount : 0)
+
+            Tab("Orders", systemImage: "list.bullet.rectangle", value: AppTab.orders) {
+                NavigationStack {
+                    OrdersView()
+                        .environmentObject(authManager)
+                        .environmentObject(cartManager)
+                }
+            }
+
+            Tab("Profile", systemImage: "person", value: AppTab.profile) {
+                NavigationStack {
+                    ProfileView()
+                        .environmentObject(authManager)
+                        .environmentObject(cartManager)
+                }
+            }
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        .overlay(alignment: .bottomTrailing) {
+            if selectedTab != .cart {
+                TrackingOrderFloatingButton()
+                    .padding(.trailing, 18)
+                    .padding(.bottom, 88)
+            }
         }
     }
-}
 
-#Preview {
-    CustomerTabView()
-        .environmentObject(AuthManager())
-    .environmentObject(CartManager.shared)
+    // MARK: iOS 17 — Standard TabView (fallback)
+
+    private var legacyTabView: some View {
+        TabView(selection: $selectedTab) {
+            NavigationStack {
+                HomeView()
+                    .environmentObject(authManager)
+                    .environmentObject(cartManager)
+            }
+            .tabItem { Label("Home", systemImage: "house") }
+            .tag(AppTab.home)
+
+            NavigationStack {
+                SearchView()
+                    .environmentObject(authManager)
+                    .environmentObject(cartManager)
+            }
+            .tabItem { Label("Search", systemImage: "magnifyingglass") }
+            .tag(AppTab.search)
+
+            NavigationStack {
+                CartView()
+                    .environmentObject(authManager)
+                    .environmentObject(cartManager)
+            }
+            .tabItem { Label("Cart", systemImage: "bag") }
+            .tag(AppTab.cart)
+            .badge(cartManager.itemCount > 0 ? cartManager.itemCount : 0)
+
+            NavigationStack {
+                OrdersView()
+                    .environmentObject(authManager)
+                    .environmentObject(cartManager)
+            }
+            .tabItem { Label("Orders", systemImage: "list.bullet.rectangle") }
+            .tag(AppTab.orders)
+
+            NavigationStack {
+                ProfileView()
+                    .environmentObject(authManager)
+                    .environmentObject(cartManager)
+            }
+            .tabItem { Label("Profile", systemImage: "person") }
+            .tag(AppTab.profile)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if selectedTab != .cart {
+                TrackingOrderFloatingButton()
+                    .padding(.trailing, 18)
+                    .padding(.bottom, 76)
+            }
+        }
+    }
 }

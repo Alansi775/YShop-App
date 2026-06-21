@@ -45,11 +45,9 @@ struct YShopRootView: View {
                         // Navigate to appropriate main area
                         if role == .customer {
                             ZStack(alignment: .bottomTrailing) {
-                                // Show HomeView inside a NavigationView initially (no bottom tab bar)
                                 NavigationView {
                                     HomeView()
                                 }
-
                                 TrackingOrderFloatingButton()
                                     .padding(.trailing, 18)
                                     .padding(.bottom, 22)

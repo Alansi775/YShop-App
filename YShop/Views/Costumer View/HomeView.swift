@@ -1,12 +1,5 @@
-//  HomeView.swift
-//  YShop
-//
-//  Created by Mohammed on 21.01.2026.
-//
-
 import SwiftUI
 
-// MARK: - Hero Product Model
 struct HeroProduct: Identifiable {
     let id = UUID()
     let name: String
@@ -17,15 +10,11 @@ struct HeroProduct: Identifiable {
     let icon: String
 }
 
-// MARK: - Native Apple Blur (Liquid Glass)
 struct NativeBlurView: UIViewRepresentable {
     var style: UIBlurEffect.Style
-
     func makeUIView(context: Context) -> UIVisualEffectView {
-        let view = UIVisualEffectView(effect: UIBlurEffect(style: style))
-        return view
+        UIVisualEffectView(effect: UIBlurEffect(style: style))
     }
-
     func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
         uiView.effect = UIBlurEffect(style: style)
     }
@@ -36,9 +25,8 @@ struct HomeView: View {
     @EnvironmentObject var cartManager: CartManager
 
     @State private var currentHeroIndex = 0
-    @State private var searchText = ""
     @State private var heroTimer: Timer?
-    @State private var isAIExpanded = false
+    @State private var showAISheet = false
     @State private var showProfileSheet = false
     @State private var showMyOrdersSheet = false
     @State private var shouldPresentMyOrdersAfterProfileDismiss = false
@@ -47,102 +35,84 @@ struct HomeView: View {
     @State private var navigateToCategoryStores = false
 
     let heroProducts = [
-        HeroProduct(name: "PREMIUM FOOD", subtitle: "Gourmet Excellence", imagePath: "9", gradient: [Color(red: 0.16, green: 0.09, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)], category: "Food", icon: "fork.knife"),
-        HeroProduct(name: "HEALTHCARE", subtitle: "Wellness Essentials", imagePath: "Hero", gradient: [Color(red: 0.10, green: 0.15, blue: 0.19), Color(red: 0, green: 0, blue: 0)], category: "Pharmacy", icon: "cross.case.fill"),
-        HeroProduct(name: "FASHION", subtitle: "Curated Style", imagePath: "0", gradient: [Color(red: 0.15, green: 0.15, blue: 0.23), Color(red: 0.04, green: 0.04, blue: 0.07)], category: "Clothes", icon: "tshirt.fill"),
-        HeroProduct(name: "FRESH MARKET", subtitle: "Farm to Table", imagePath: "1", gradient: [Color(red: 0.18, green: 0.14, blue: 0.09), Color(red: 0.06, green: 0.04, blue: 0.02)], category: "Market", icon: "basket.fill"),
+        HeroProduct(name: "PREMIUM FOOD",  subtitle: "Gourmet Excellence",  imagePath: "9",    gradient: [Color(red: 0.16, green: 0.09, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)], category: "Food",     icon: "fork.knife"),
+        HeroProduct(name: "HEALTHCARE",    subtitle: "Wellness Essentials", imagePath: "Hero", gradient: [Color(red: 0.10, green: 0.15, blue: 0.19), Color(red: 0, green: 0, blue: 0)],           category: "Pharmacy", icon: "cross.case.fill"),
+        HeroProduct(name: "FASHION",       subtitle: "Curated Style",       imagePath: "0",    gradient: [Color(red: 0.15, green: 0.15, blue: 0.23), Color(red: 0.04, green: 0.04, blue: 0.07)], category: "Clothes",  icon: "tshirt.fill"),
+        HeroProduct(name: "FRESH MARKET",  subtitle: "Farm to Table",       imagePath: "1",    gradient: [Color(red: 0.18, green: 0.14, blue: 0.09), Color(red: 0.06, green: 0.04, blue: 0.02)], category: "Market",   icon: "basket.fill"),
     ]
 
     var body: some View {
         ZStack {
-            NavigationLink(destination: CategoryStoresView(categoryName: selectedCategory), isActive: $navigateToCategoryStores) { EmptyView() }.hidden()
+            // Single NavigationLink — prevents duplicate firings from each tab
+            NavigationLink(
+                destination: CategoryStoresView(categoryName: selectedCategory),
+                isActive: $navigateToCategoryStores
+            ) { EmptyView() }.hidden()
 
-            VStack(spacing: 0) {
-                ZStack {
-                    LinearGradient(gradient: Gradient(colors: heroProducts[currentHeroIndex].gradient), startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            if #available(iOS 18.0, *) {
+                nativeTabView
+            } else {
+                legacyView
+            }
+        }
+        .sheet(isPresented: $showAISheet) {
+            AIShoppingView()
+                .environmentObject(authManager)
+                .environmentObject(cartManager)
+        }
+        .sheet(isPresented: $showProfileSheet, onDismiss: {
+            if shouldPresentMyOrdersAfterProfileDismiss {
+                shouldPresentMyOrdersAfterProfileDismiss = false
+                showMyOrdersSheet = true
+            }
+        }) {
+            ProfileSheetView(isPresented: $showProfileSheet, onMyOrders: {
+                shouldPresentMyOrdersAfterProfileDismiss = true
+                showProfileSheet = false
+            })
+        }
+        .sheet(isPresented: $showMyOrdersSheet) {
+            NavigationStack {
+                MyOrdersView()
+                    .environmentObject(authManager)
+                    .environmentObject(cartManager)
+            }
+        }
+        .sheet(isPresented: $showCartSheet) {
+            CartView(showsCloseButton: true)
+        }
+        .onAppear { startAutoRotate() }
+        .onDisappear { heroTimer?.invalidate() }
+    }
 
-                    VStack(spacing: 0) {
-                        Spacer()
+    // MARK: - iOS 18 Native TabView
 
-                        VStack {
-                            Text("YSHOP").font(.system(size: 42, weight: .semibold)).tracking(4).foregroundColor(.white)
-                        }.frame(maxWidth: .infinity).frame(height: 80)
-
-                        Spacer()
-
-                        if let uiImage = UIImage(named: heroProducts[currentHeroIndex].imagePath) {
-                            Image(uiImage: uiImage).resizable().scaledToFit().frame(height: UIScreen.main.bounds.height * 0.25)
-                        } else {
-                            VStack(spacing: 12) {
-                                Image(systemName: "photo.fill").font(.system(size: 48)).foregroundColor(Color(.tertiaryLabel))
-                                Text(heroProducts[currentHeroIndex].imagePath).font(.system(size: 14, weight: .semibold)).foregroundColor(Color(.secondaryLabel))
-                            }.frame(height: UIScreen.main.bounds.height * 0.25)
-                        }
-
-                        Spacer()
-
-                        VStack(spacing: 12) {
-                            HStack {
-                                Image(systemName: "sparkles").foregroundColor(.white)
-                                TextField("Ask me anything...", text: $searchText).textFieldStyle(.plain).foregroundColor(.white)
-                                if !searchText.isEmpty {
-                                    Button(action: { searchText = "" }) { Image(systemName: "xmark").foregroundColor(.white.opacity(0.6)) }
-                                }
-                            }
-                            .padding(12)
-                            .background(Color.white.opacity(0.15))
-                            .backdrop()
-                            .cornerRadius(14)
-                            .frame(maxWidth: 280)
-                        }.padding(.horizontal, 40)
-
-                        Spacer()
-
-                        VStack(spacing: 16) {
-                            Text(heroProducts[currentHeroIndex].name).font(.system(size: 42, weight: .light)).tracking(3).foregroundColor(.white).multilineTextAlignment(.center)
-                            Text(heroProducts[currentHeroIndex].subtitle).font(.system(size: 14, weight: .regular)).tracking(1.5).foregroundColor(.white.opacity(0.7))
-                            Button(action: { selectedCategory = heroProducts[currentHeroIndex].category; navigateToCategoryStores = true }) {
-                                HStack(spacing: 10) {
-                                    Text("EXPLORE")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .tracking(1.5)
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 12, weight: .bold))
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 28)
-                                .padding(.vertical, 14)
-                                .background {
-                                    if #available(iOS 26, *) {
-                                        Color.clear.glassEffect(in: Capsule())
-                                    } else {
-                                        Capsule().fill(.ultraThinMaterial.opacity(0.8))
-                                    }
-                                }
-                                .clipShape(Capsule())
-                                .overlay(
-                                    Capsule().stroke(
-                                        LinearGradient(
-                                            colors: [
-                                                Color(red: 0.38, green: 0.72, blue: 1.0).opacity(0.75),
-                                                Color.white.opacity(0.5),
-                                                Color(red: 1.0, green: 0.48, blue: 0.78).opacity(0.65),
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        lineWidth: 1.2
-                                    )
-                                )
-                                .shadow(color: .black.opacity(0.2), radius: 14, y: 5)
-                            }.padding(.top, 12)
-                        }
-
-                        Spacer().frame(height: 120)
-                    }
+    @available(iOS 18.0, *)
+    private var nativeTabView: some View {
+        TabView(selection: $currentHeroIndex) {
+            ForEach(Array(heroProducts.enumerated()), id: \.offset) { i, hero in
+                Tab(hero.category, systemImage: hero.icon, value: i) {
+                    heroPage(hero, index: i)
                 }
             }
-            .frame(maxHeight: .infinity)
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                NativeCircleIconButton(systemName: "person.fill", action: { showProfileSheet = true })
+                HStack(spacing: 6) {
+                    CartBadgeButton(itemCount: cartManager.itemCount, action: { showCartSheet = true }, iconColor: .white)
+                    if cartManager.itemCount > 0 { CartCountBadge(count: cartManager.itemCount) }
+                }
+            }
+        }
+    }
+
+    // MARK: - iOS 17 Fallback (AppleStretchyTabBar)
+
+    private var legacyView: some View {
+        ZStack {
+            heroPageContent(heroProducts[currentHeroIndex])
         }
         .overlay(alignment: .bottom) {
             AppleStretchyTabBar(
@@ -165,33 +135,118 @@ struct HomeView: View {
         }
         .toolbar(.hidden, for: .bottomBar)
         .gesture(DragGesture().onEnded { value in
-            let threshold: CGFloat = 50
-            if value.translation.width > threshold {
+            if value.translation.width > 50 {
                 changeProduct((currentHeroIndex - 1 + heroProducts.count) % heroProducts.count)
-            } else if value.translation.width < -threshold {
+            } else if value.translation.width < -50 {
                 changeProduct((currentHeroIndex + 1) % heroProducts.count)
             }
         })
-        .sheet(isPresented: $showProfileSheet, onDismiss: {
-            if shouldPresentMyOrdersAfterProfileDismiss {
-                shouldPresentMyOrdersAfterProfileDismiss = false
-                showMyOrdersSheet = true
-            }
-        }) {
-            ProfileSheetView(isPresented: $showProfileSheet, onMyOrders: {
-                shouldPresentMyOrdersAfterProfileDismiss = true
-                showProfileSheet = false
-            })
-        }
-        .sheet(isPresented: $showMyOrdersSheet) {
-            NavigationStack { MyOrdersView().environmentObject(authManager).environmentObject(cartManager) }
-        }
-        .sheet(isPresented: $showCartSheet) { CartView(showsCloseButton: true) }
-        .onAppear { startAutoRotate() }
-        .onDisappear { heroTimer?.invalidate() }
     }
 
-    // MARK: - Methods
+    // MARK: - Hero Page (iOS 18 Tab content)
+
+    @available(iOS 18.0, *)
+    private func heroPage(_ hero: HeroProduct, index: Int) -> some View {
+        heroPageContent(hero)
+        .gesture(DragGesture().onEnded { value in
+            if value.translation.width > 50 {
+                changeProduct((index - 1 + heroProducts.count) % heroProducts.count)
+            } else if value.translation.width < -50 {
+                changeProduct((index + 1) % heroProducts.count)
+            }
+        })
+    }
+
+    // MARK: - Hero Content (shared)
+
+    @ViewBuilder
+    private func heroPageContent(_ hero: HeroProduct) -> some View {
+        ZStack {
+            LinearGradient(
+                gradient: Gradient(colors: hero.gradient),
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                Text("YSHOP")
+                    .font(.system(size: 42, weight: .semibold))
+                    .tracking(4)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 80)
+
+                Spacer()
+
+                if let uiImage = UIImage(named: hero.imagePath) {
+                    Image(uiImage: uiImage)
+                        .resizable().scaledToFit()
+                        .frame(height: UIScreen.main.bounds.height * 0.25)
+                } else {
+                    VStack(spacing: 12) {
+                        Image(systemName: "photo.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(Color(.tertiaryLabel))
+                        Text(hero.imagePath)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color(.secondaryLabel))
+                    }
+                    .frame(height: UIScreen.main.bounds.height * 0.25)
+                }
+
+                Spacer()
+
+                // AI Ask Button
+                Button(action: { showAISheet = true }) {
+                    HStack {
+                        Image(systemName: "sparkles").foregroundColor(.white)
+                        Text("Ask me anything...")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.system(size: 16))
+                        Spacer()
+                        Image(systemName: "mic")
+                            .foregroundColor(.white.opacity(0.5))
+                            .font(.system(size: 14))
+                    }
+                    .padding(12)
+                    .background(Color.white.opacity(0.15))
+                    .backdrop()
+                    .cornerRadius(14)
+                    .frame(maxWidth: 280)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 40)
+
+                Spacer()
+
+                VStack(spacing: 16) {
+                    Text(hero.name)
+                        .font(.system(size: 42, weight: .light))
+                        .tracking(3)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+
+                    Text(hero.subtitle)
+                        .font(.system(size: 14, weight: .regular))
+                        .tracking(1.5)
+                        .foregroundColor(.white.opacity(0.7))
+
+                    ExploreButton {
+                        selectedCategory = hero.category
+                        navigateToCategoryStores = true
+                    }
+                    .padding(.top, 12)
+                }
+
+                Spacer().frame(height: 40)
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
     private func changeProduct(_ index: Int) {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
             currentHeroIndex = index
@@ -207,8 +262,62 @@ struct HomeView: View {
     }
 }
 
+// MARK: - Explore Button
 
-// MARK: - Backdrop Effect
+private struct ExploreButton: View {
+    let action: () -> Void
+    private static let cycleDuration: Double = 10.0
+
+    var body: some View {
+        // TimelineView drives angle from real clock time — never resets on tab swap
+        TimelineView(.animation) { ctx in
+            let phase = ctx.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: Self.cycleDuration) / Self.cycleDuration
+            buttonFace(angle: phase * 360.0)
+        }
+    }
+
+    private func buttonFace(angle: Double) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Text("EXPLORE")
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(1.5)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 14)
+            // Fixed color background — no material, so no flash when gradient changes
+            .background(Capsule().fill(Color.white.opacity(0.12)))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().stroke(
+                    AngularGradient(
+                        colors: [
+                            .clear, .clear, .clear,
+                            Color.white.opacity(0.18),
+                            Color(red: 0.55, green: 0.80, blue: 0.98).opacity(0.55),
+                            Color.white.opacity(0.92),
+                            Color(red: 0.55, green: 0.80, blue: 0.98).opacity(0.45),
+                            Color.white.opacity(0.15),
+                            .clear, .clear,
+                        ],
+                        center: .center,
+                        angle: .degrees(angle)
+                    ),
+                    lineWidth: 1.1
+                )
+            )
+            .shadow(color: .black.opacity(0.18), radius: 14, y: 5)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Backdrop
+
 struct BackdropView: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
