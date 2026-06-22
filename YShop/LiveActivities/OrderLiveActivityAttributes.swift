@@ -15,6 +15,9 @@ struct OrderLiveActivityAttributes: ActivityAttributes {
         var storeType: String    // "Food" | "Pharmacy" | "Clothes" | "Market"
         var isDelivered: Bool
         var isCancelled: Bool
+        // Driver proximity — meaningful only when step == 3 or isDelivered
+        var proximityFraction: Double = 0.0  // 0–0.95 while on the way; 1.0 when delivered
+        var distanceText: String? = nil       // "800 m away" or "1.2 km away"
     }
 
     // MARK: - Static (set once at creation)

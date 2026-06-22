@@ -6,7 +6,6 @@ struct CategoryStoresView: View {
     @State private var stores: [Store] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @StateObject private var updateService = StoreUpdateService()
     @EnvironmentObject var cartManager: CartManager
     @State private var showCartSheet = false
     @Environment(\.colorScheme) var colorScheme
@@ -129,58 +128,90 @@ struct CategoryStoresView: View {
         }
         .onAppear {
             loadStores()
-            updateService.startPolling(forType: categoryName)
         }
-        .onDisappear {
-            updateService.stopPolling()
-        }
-        .onChange(of: updateService.storeUpdates) { updates in
-            applyUpdates(updates)
-        }
-    }
+        // Socket.IO event: admin changed a store — update list in-place, no network call
+        .onReceive(NotificationCenter.default.publisher(for: .yshopStoreChanged)) { notification in
+            guard let info = notification.userInfo else { return }
+            let action    = info["action"]    as? String ?? ""
+            let storeId   = info["storeId"]   as? String ?? ""
+            let status    = info["status"]    as? String ?? ""
+            let storeType = info["storeType"] as? String ?? ""
 
-    private func applyUpdates(_ updates: [StoreUpdate]) {
-        print("🔄 [UPDATE] Applying \(updates.count) store updates")
-        for update in updates {
-            if let index = stores.firstIndex(where: { $0.id == update.id }) {
-                print("  ✏️ Updated store: \(update.name) - Status: \(update.status)")
-                stores[index].status = update.status
+            // Match this category OR apply if storeType unknown
+            // Use lowercased comparison to handle Food/food/FOOD
+            guard storeType.isEmpty || storeType.lowercased() == categoryName.lowercased() else { return }
+
+            // Only stores with status "approved" (case-insensitive) are visible
+            let shouldBeVisible = status.lowercased() == "approved"
+
+            switch action {
+            case "store_deleted":
+                // Hard delete — always remove
+                stores.removeAll { String($0.id) == storeId }
+                AppCache.shared.invalidate(.stores(category: categoryName))
+                AppCache.shared.set(.stores(category: categoryName), value: stores)
+
+            case "store_updated" where !shouldBeVisible:
+                // Suspended / rejected / pending → hide immediately
+                stores.removeAll { String($0.id) == storeId }
+                AppCache.shared.invalidate(.stores(category: categoryName))
+                AppCache.shared.set(.stores(category: categoryName), value: stores)
+
+            case "store_updated" where shouldBeVisible:
+                // Re-approved → add back if not already in list
+                if !stores.contains(where: { String($0.id) == storeId }) {
+                    AppCache.shared.invalidate(.stores(category: categoryName))
+                    Task {
+                        if let fresh = try? await StoreService.getPublicStoresByType(categoryName) {
+                            stores = fresh
+                            AppCache.shared.set(.stores(category: categoryName), value: fresh)
+                        }
+                    }
+                }
+
+            default:
+                break
             }
         }
     }
 
     private func loadStores() {
-        isLoading = true
         errorMessage = nil
-        print("🔍 [STORES] Starting to load stores for category: \(categoryName)")
+        let cacheKey = AppCache.Key.stores(category: categoryName)
+
+        // Show cached data instantly — no loading spinner if we have something
+        if let hit: CacheResult<[Store]> = AppCache.shared.get(cacheKey) {
+            stores = hit.value
+            prefetchImages(hit.value)
+            if !hit.isStale { return }  // Cache is fresh — done, no network call needed
+            // Cache is stale — show cached data now, refresh in background below
+        } else {
+            isLoading = true  // First launch: show spinner until first fetch
+        }
 
         Task {
             do {
-                let fetchedStores = try await StoreService.getPublicStoresByType(categoryName)
-                print("✅ [STORES] Successfully fetched stores: \(fetchedStores.count)")
-                for store in fetchedStores {
-                    print("  • \(store.name) - Type: \(store.storeType ?? "Unknown")")
-                }
-                
+                let fresh = try await StoreService.getPublicStoresByType(categoryName)
                 await MainActor.run {
-                    self.stores = fetchedStores
-                    let urls = fetchedStores.compactMap {
-                        URL(string: $0.fullIconUrl ?? "")
-                    }
-
-                    ImagePrefetcher(urls: urls).start()
+                    self.stores = fresh
                     self.isLoading = false
+                    self.prefetchImages(fresh)
                 }
             } catch {
-                print("❌ [STORES] Error loading stores for '\(self.categoryName)': \(error)")
-                print("  Error description: \(error.localizedDescription)")
-                
                 await MainActor.run {
-                    self.errorMessage = "Failed to load stores: \(error.localizedDescription)"
                     self.isLoading = false
+                    // Only show error when there's nothing to display
+                    if self.stores.isEmpty {
+                        self.errorMessage = "Failed to load stores"
+                    }
                 }
             }
         }
+    }
+
+    private func prefetchImages(_ stores: [Store]) {
+        let urls = stores.compactMap { URL(string: $0.fullIconUrl ?? "") }
+        ImagePrefetcher(urls: urls).start()
     }
 }
 

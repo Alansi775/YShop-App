@@ -1,4 +1,5 @@
 import ActivityKit
+import CoreLocation
 import Foundation
 
 @MainActor
@@ -105,15 +106,46 @@ final class LiveActivityManager {
     // MARK: - Helpers
 
     private func contentState(from order: Order) -> OrderLiveActivityAttributes.ContentState {
-        OrderLiveActivityAttributes.ContentState(
+        let (proximityFraction, distanceText) = Self.proximityInfo(from: order)
+        return OrderLiveActivityAttributes.ContentState(
             statusTitle: order.status.liveActivityTitle,
             statusStep: order.status.stepNumber,
             driverName: order.driverName,
             storeName: order.storeName ?? "Store",
             storeType: order.storeType ?? "Food",
             isDelivered: order.status == .delivered,
-            isCancelled: order.status == .cancelled || order.status == .failed
+            isCancelled: order.status == .cancelled || order.status == .failed,
+            proximityFraction: proximityFraction,
+            distanceText: distanceText
         )
+    }
+
+    // Calculate driver→customer proximity fraction and distance label.
+    // Returns (1.0, nil) when delivered; (0.95 max, label) while en route.
+    private static func proximityInfo(from order: Order) -> (Double, String?) {
+        if order.status == .delivered { return (1.0, nil) }
+        guard order.status == .outForDelivery || order.status == .shipped,
+              let driverLocation = order.driverLocation,
+              let customerLat = order.customerLatitude,
+              let customerLon = order.customerLongitude
+        else { return (0.0, nil) }
+
+        let parts = driverLocation
+            .split(separator: ",")
+            .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard parts.count >= 2 else { return (0.0, nil) }
+
+        let driverCL   = CLLocation(latitude: parts[0], longitude: parts[1])
+        let customerCL = CLLocation(latitude: customerLat, longitude: customerLon)
+        let meters     = driverCL.distance(from: customerCL)
+
+        let label = meters < 1000
+            ? "\(Int(meters)) m away"
+            : String(format: "%.1f km away", meters / 1000)
+
+        // 3 km = 0 %, 0 m = 95 % (100 % reserved for delivered state)
+        let fraction = max(0, min(0.95, 1.0 - meters / 3000.0))
+        return (fraction, label)
     }
 }
 

@@ -436,13 +436,14 @@ class AuthManager: NSObject, ObservableObject {
         currentUser = nil
         token = nil  // This deletes from Keychain
         SocketService.shared.disconnect()
-        
+
         // Clear UserDefaults
         UserDefaults.standard.removeObject(forKey: roleKey)
         UserDefaults.standard.removeObject(forKey: tokenKey)
         UserDefaults.standard.synchronize()
         CartManager.shared.clearLocalState()
-        
+        AppCache.shared.invalidateAll()
+
         print("🚪 [LOGOUT] User logged out successfully")
     }
 

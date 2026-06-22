@@ -22,72 +22,83 @@ class StoreService {
         try await APIClient.shared.request(.publicStores)
     }
 
-    // MARK: - Get Public Stores by Type/Category
+    // MARK: - Get Public Stores by Type/Category (cache-first)
     static func getPublicStoresByType(_ type: String) async throws -> [Store] {
+        let cacheKey = AppCache.Key.stores(category: type)
+
+        // Return fresh cache immediately — no network call needed
+        if let hit: CacheResult<[Store]> = AppCache.shared.get(cacheKey), !hit.isStale {
+            return hit.value
+        }
+
         // Capitalize first letter to match database values (Food, Pharmacy, Clothes, Market)
         let capitalizedType = type.prefix(1).uppercased() + type.dropFirst()
         let typeEncoded = capitalizedType.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        
+
         var lastError: Error?
-        
-        // Try each candidate URL with fallover
+
         for baseURL in AppConstants.baseURLCandidates {
             do {
                 let urlString = "\(baseURL)/stores/public?type=\(typeEncoded)"
-                
-                print("📍 [API] Requesting stores with URL: \(urlString)")
-                
-                guard let url = URL(string: urlString) else {
-                    throw NSError(domain: "Invalid URL", code: -1)
-                }
-                
+                guard let url = URL(string: urlString) else { throw NSError(domain: "Invalid URL", code: -1) }
+
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
                 request.timeoutInterval = 4
-                
+
                 let (data, response) = try await URLSession.shared.data(for: request)
-                
-                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                     throw NSError(domain: "HTTP Error", code: -1)
                 }
-                
-                struct StoresResponse: Decodable {
-                    let data: [Store]
-                }
-                
-                let decoder = JSONDecoder()
-                let storesResponse = try decoder.decode(StoresResponse.self, from: data)
-                print("✅ [API] Response returned \(storesResponse.data.count) stores")
-                return storesResponse.data
+
+                struct StoresResponse: Decodable { let data: [Store] }
+                let stores = try JSONDecoder().decode(StoresResponse.self, from: data).data
+                AppCache.shared.set(cacheKey, value: stores)
+                return stores
             } catch {
                 lastError = error
-                print("🔁 [API] Failed with \(baseURL), trying next...")
                 continue
             }
         }
-        
-        // If all failed, throw the last error
         throw lastError ?? NSError(domain: "All endpoints failed", code: -1)
     }
 
-    // MARK: - Get Store Detail
+    // MARK: - Get Store Detail (cache-first)
     static func getStoreDetail(id: String) async throws -> Store {
+        let cacheKey = AppCache.Key.storeDetail(id: id)
+        if let hit: CacheResult<Store> = AppCache.shared.get(cacheKey), !hit.isStale {
+            return hit.value
+        }
+        let store: Store
         do {
             let response: APIResponse<Store> = try await APIClient.shared.request(.storeDetail(id))
-            return response.data
+            store = response.data
         } catch {
-            return try await APIClient.shared.request(.storeDetail(id))
+            store = try await APIClient.shared.request(.storeDetail(id))
         }
+        AppCache.shared.set(cacheKey, value: store)
+        return store
     }
 
-    // MARK: - Get Store Categories
+    // MARK: - Get Store Categories (cache-first)
     static func getStoreCategories(storeId: String) async throws -> [Category] {
-        try await APIClient.shared.request(.storeCategories(storeId))
+        let cacheKey = AppCache.Key.categories(storeId: storeId)
+        if let hit: CacheResult<[Category]> = AppCache.shared.get(cacheKey), !hit.isStale {
+            return hit.value
+        }
+        let cats: [Category] = try await APIClient.shared.request(.storeCategories(storeId))
+        AppCache.shared.set(cacheKey, value: cats)
+        return cats
     }
-    
-    // MARK: - Get Store Products
+
+    // MARK: - Get Store Products (cache-first)
     static func getStoreProducts(storeId: Int) async throws -> [Product] {
+        let cacheKey = AppCache.Key.products(storeId: storeId)
+        if let hit: CacheResult<[Product]> = AppCache.shared.get(cacheKey), !hit.isStale {
+            return hit.value
+        }
         let response: APIResponse<[Product]> = try await APIClient.shared.request(.storeProducts(storeId))
+        AppCache.shared.set(cacheKey, value: response.data)
         return response.data
     }
 }

@@ -54,6 +54,24 @@ struct YShopApp: App {
             .environmentObject(authManager)
             .environmentObject(cartManager)
             .environmentObject(locationManager)
+            .onOpenURL { url in
+                guard url.scheme == "yshop" else { return }
+                let orderId = url.lastPathComponent
+                switch url.host {
+                case "track":
+                    // Active order → open tracking sheet via the floating button mechanism
+                    CartManager.shared.presentTrackingOrder(id: orderId)
+                case "history":
+                    // Delivered order → open My Orders sheet
+                    NotificationCenter.default.post(name: .yshopOpenMyOrders, object: nil)
+                default:
+                    break
+                }
+            }
         }
     }
+}
+
+extension Notification.Name {
+    static let yshopOpenMyOrders = Notification.Name("yshop.openMyOrders")
 }

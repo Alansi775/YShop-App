@@ -83,6 +83,9 @@ struct HomeView: View {
         }
         .onAppear { startAutoRotate() }
         .onDisappear { heroTimer?.invalidate() }
+        .onReceive(NotificationCenter.default.publisher(for: .yshopOpenMyOrders)) { _ in
+            showMyOrdersSheet = true
+        }
     }
 
     // MARK: - iOS 18 Native TabView

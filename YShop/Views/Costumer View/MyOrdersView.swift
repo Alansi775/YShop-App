@@ -243,24 +243,41 @@ struct MyOrdersView: View {
 	}
 
 	private func loadOrders() async {
-		isLoading = true
 		errorMessage = nil
+
+		// Show cached orders instantly — no spinner if we have data
+		if let hit: CacheResult<[Order]> = AppCache.shared.get(.userOrders) {
+			orders = hit.value
+			await loadStoreMetadata(for: hit.value)
+			if !hit.isStale {
+				isLoading = false
+				// Still sync complaints in background
+				await syncComplaints()
+				return
+			}
+			isLoading = false  // stale: show cached, but continue to network refresh below
+		} else {
+			isLoading = true
+		}
 
 		do {
 			let userOrders = try await OrderService.getUserOrders()
 			orders = userOrders
 			await loadStoreMetadata(for: userOrders)
 		} catch {
-			errorMessage = error.localizedDescription
+			if orders.isEmpty { errorMessage = error.localizedDescription }
 		}
 
-		// Always sync complaint state from backend — decode now handles MySQL int order_id
+		await syncComplaints()
+		isLoading = false
+	}
+
+	private func syncComplaints() async {
 		let myComplaints = await ComplaintService.getMyComplaints()
 		let byOrderId = Dictionary(uniqueKeysWithValues: myComplaints.map { ($0.orderId, $0) })
 		complainedOrderIds = Set(myComplaints.map { $0.orderId })
 		complaintsByOrderId = byOrderId
 		UserDefaults.standard.set(Array(complainedOrderIds), forKey: "yshop_complained_orders")
-		isLoading = false
 	}
 
 	private func cancelReturn() async {

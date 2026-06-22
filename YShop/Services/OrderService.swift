@@ -43,14 +43,21 @@ class OrderService {
         return try await APIClient.shared.request(.createOrder, body: request)
     }
 
-    // MARK: - Get User Orders
+    // MARK: - Get User Orders (cache-first, short TTL)
     static func getUserOrders(page: Int = 1) async throws -> [Order] {
+        let cacheKey = AppCache.Key.userOrders
+        if let hit: CacheResult<[Order]> = AppCache.shared.get(cacheKey), !hit.isStale {
+            return hit.value
+        }
+        let orders: [Order]
         do {
             let response: APIResponse<[Order]> = try await APIClient.shared.request(.getUserOrders)
-            return response.data
+            orders = response.data
         } catch {
-            return try await APIClient.shared.request(.getUserOrders)
+            orders = try await APIClient.shared.request(.getUserOrders)
         }
+        AppCache.shared.set(cacheKey, value: orders)
+        return orders
     }
 
     // MARK: - Get Order Detail

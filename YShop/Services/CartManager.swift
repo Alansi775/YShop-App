@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UserNotifications
 
 @MainActor
 final class CartManager: ObservableObject {
@@ -14,8 +15,88 @@ final class CartManager: ObservableObject {
     @Published private(set) var pendingTrackingOrderId: String?
     @Published private(set) var activeTrackingOrder: Order?
 
+    private var orderUpdateObserver: NSObjectProtocol?
+
     private init() {
         lastOrderId = UserDefaults.standard.string(forKey: lastOrderIdKey)
+        startListeningForOrderUpdates()
+    }
+
+    // Automatically refresh the active order and Live Activity whenever the
+    // server pushes an order_updated socket event — no manual tap required.
+    private func startListeningForOrderUpdates() {
+        orderUpdateObserver = NotificationCenter.default.addObserver(
+            forName: .yshopOrderUpdated,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let incomingId = notification.object as? String
+                await self.handleSocketOrderUpdate(incomingId)
+            }
+        }
+    }
+
+    private func handleSocketOrderUpdate(_ incomingId: String?) async {
+        // Capture previous status before refresh so we can detect changes
+        let previousStatus = activeTrackingOrder?.status
+
+        AppCache.shared.invalidate(.userOrders)
+        if let id = incomingId { AppCache.shared.invalidate(.activeOrder(id: id)) }
+
+        await refreshActiveTrackingOrder()
+
+        guard let order = activeTrackingOrder else { return }
+
+        // Update Live Activity without waiting for APNs
+        LiveActivityManager.shared.update(with: order)
+
+        // Schedule a local notification if status changed
+        // This fires even when OrderTrackingView is closed
+        if order.status != previousStatus {
+            scheduleOrderStatusNotification(order: order, newStatus: order.status)
+        }
+    }
+
+    // Local notification so the customer knows the order changed
+    // without needing to open the tracking view or Live Activity
+    private func scheduleOrderStatusNotification(order: Order, newStatus: OrderStatus) {
+        let store = order.storeName ?? "Your store"
+        var title: String?
+        var body: String?
+
+        switch newStatus {
+        case .confirmed:
+            title = "✅ Order Confirmed"
+            body  = "\(store) confirmed your order and started preparing it."
+        case .shipped, .outForDelivery:
+            title = "🛵 Driver is on the way!"
+            body  = "Your order from \(store) has been picked up."
+        case .delivered:
+            title = "🎉 Order Delivered!"
+            body  = "Your order from \(store) has arrived. Enjoy!"
+        case .cancelled:
+            title = "❌ Order Cancelled"
+            body  = "Your order from \(store) was cancelled."
+        case .failed:
+            title = "⚠️ Order Failed"
+            body  = "There was a problem with your order from \(store)."
+        default:
+            return
+        }
+
+        guard let title, let body else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body  = body
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "order-\(order.id)-\(newStatus.rawValue)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     var itemCount: Int {

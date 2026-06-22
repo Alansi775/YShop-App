@@ -57,10 +57,15 @@ private func statusIcon(_ type: String, step: Int) -> String {
 struct OrderLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: OrderLiveActivityAttributes.self) { context in
+            let rawId = context.attributes.orderNumber.replacingOccurrences(of: "#", with: "")
+            let dest  = context.state.isDelivered ? "history" : "track"
             LockScreenView(context: context)
                 .activityBackgroundTint(Color(.systemBackground))
+                .widgetURL(URL(string: "yshop://\(dest)/\(rawId)"))
         } dynamicIsland: { context in
-            DynamicIsland {
+            let rawId = context.attributes.orderNumber.replacingOccurrences(of: "#", with: "")
+            let dest  = context.state.isDelivered ? "history" : "track"
+            return DynamicIsland {
                 islandExpanded(context)
             } compactLeading: {
                 let t = StepTheme.resolve(context.state)
@@ -91,7 +96,7 @@ struct OrderLiveActivity: Widget {
                 .font(.system(size: 12))
                 .foregroundStyle(t.accent)
             }
-            .widgetURL(URL(string: "yshop://order/\(context.attributes.orderNumber)"))
+            .widgetURL(URL(string: "yshop://\(dest)/\(rawId)"))
             .keylineTint(StepTheme.resolve(context.state).accent)
         }
     }
@@ -147,9 +152,14 @@ struct OrderLiveActivity: Widget {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
-                StepTrack(step: ctx.state.statusStep,
-                          theme: theme,
-                          isCancelled: ctx.state.isCancelled)
+                StepTrack(
+                    step: ctx.state.statusStep,
+                    theme: theme,
+                    isCancelled: ctx.state.isCancelled,
+                    proximityFraction: ctx.state.proximityFraction,
+                    distanceText: ctx.state.distanceText,
+                    isDelivered: ctx.state.isDelivered
+                )
             }
             .padding(.top, 2)
         }
@@ -170,26 +180,16 @@ struct LockScreenView: View {
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
 
-            // Gradient icon bubble with Y brand badge
-            ZStack(alignment: .bottomTrailing) {
-                ZStack {
-                    theme.gradient
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .frame(width: 62, height: 62)
-                    Image(systemName: icon)
-                        .font(.system(size: 27, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .symbolEffect(.pulse,
-                                      isActive: context.state.statusStep == 3 && !context.state.isDelivered)
-                }
-                // Y monogram badge — accent fill so it's always visible
-                Text("Y")
-                    .font(.system(size: 8, weight: .black))
+            // Gradient icon bubble
+            ZStack {
+                theme.gradient
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .frame(width: 62, height: 62)
+                Image(systemName: icon)
+                    .font(.system(size: 27, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 16, height: 16)
-                    .background(Circle().fill(theme.deep))
-                    .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
-                    .offset(x: 3, y: 3)
+                    .symbolEffect(.pulse,
+                                  isActive: context.state.statusStep == 3 && !context.state.isDelivered)
             }
 
             // Info column
@@ -220,13 +220,19 @@ struct LockScreenView: View {
                         .foregroundStyle(.primary)
                 }
 
-                // Progress
-                StepTrack(step: context.state.statusStep,
-                          theme: theme,
-                          isCancelled: context.state.isCancelled)
+                // Progress — Y badge slides along the track; glides live during delivery
+                StepTrack(
+                    step: context.state.statusStep,
+                    theme: theme,
+                    isCancelled: context.state.isCancelled,
+                    proximityFraction: context.state.proximityFraction,
+                    distanceText: context.state.distanceText,
+                    isDelivered: context.state.isDelivered
+                )
 
-                // Driver (optional)
-                if let driver = context.state.driverName, !driver.isEmpty {
+                // Driver name (when on the way or delivered)
+                if let driver = context.state.driverName, !driver.isEmpty,
+                   context.state.statusStep >= 3 || context.state.isDelivered {
                     Label(driver, systemImage: "person.circle.fill")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
@@ -238,64 +244,117 @@ struct LockScreenView: View {
     }
 }
 
-// MARK: - Step progress track
+// MARK: - Step progress track with sliding Y badge
 
 struct StepTrack: View {
     let step: Int
     let theme: StepTheme
     let isCancelled: Bool
+    var proximityFraction: Double = 0.0  // 0–0.95 while driving; 1.0 when delivered
+    var distanceText: String? = nil       // "800 m away" shown under "On Way" label
+    var isDelivered: Bool = false
 
     private let labels = ["Placed", "Prep", "On Way", "Done"]
 
+    // Normalised position (0–1) of the Y badge along the usable track.
+    // Steps 1-2 snap to fixed positions; step 3 glides with driver proximity.
+    private var badgeFraction: Double {
+        if isCancelled { return 0 }
+        if isDelivered || step >= 4 { return 1 }
+        switch step {
+        case 1:  return 0
+        case 2:  return 1.0 / 3.0
+        case 3:
+            // Glide from the 2/3 mark toward the end as the driver approaches.
+            // proximityFraction tops out at 0.95 so the badge never reaches
+            // the "Done" dot until the status actually becomes delivered.
+            let base = 2.0 / 3.0
+            return base + (1.0 - base) * min(1, proximityFraction / 0.95)
+        default: return 0
+        }
+    }
+
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 4) {
+            // Track — Y badge glides over 4 checkpoint dots on a gradient rail
             GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    // Background rail
+                let badge: CGFloat = 20      // Y badge diameter
+                let rail:  CGFloat = 4       // rail height
+                let dot:   CGFloat = 7       // checkpoint dot diameter
+                // Usable track spans from badge/2 to width-badge/2 so the badge
+                // never clips outside the frame at either end.
+                let usable: CGFloat  = geo.size.width - badge
+                let f: CGFloat       = CGFloat(badgeFraction)
+                let badgeX: CGFloat  = usable * f   // leading edge of the badge
+
+                // Background rail (spans the usable portion, vertically centred)
+                Capsule()
+                    .fill(Color.secondary.opacity(0.14))
+                    .frame(width: geo.size.width - badge, height: rail)
+                    .offset(x: badge / 2, y: (badge - rail) / 2)
+
+                // Filled gradient trail up to the badge's current position
+                if !isCancelled && f > 0 {
                     Capsule()
-                        .fill(Color.secondary.opacity(0.14))
-                        .frame(height: 5)
+                        .fill(theme.gradient)
+                        .frame(width: max(0, usable * f), height: rail)
+                        .offset(x: badge / 2, y: (badge - rail) / 2)
+                        .animation(.spring(duration: 0.7), value: f)
+                }
 
-                    // Filled rail with gradient
-                    if !isCancelled && step > 1 {
-                        Capsule()
-                            .fill(theme.gradient)
-                            .frame(width: geo.size.width * CGFloat(step - 1) / 3.0, height: 5)
-                            .animation(.spring(duration: 0.6), value: step)
-                    }
+                // Checkpoint dots at each of the 4 step positions
+                ForEach(0..<4, id: \.self) { i in
+                    let cx: CGFloat = badge / 2 + usable * CGFloat(i) / 3.0
+                    let reached = !isCancelled && (i + 1) <= step
+                    Circle()
+                        .fill(reached ? theme.accent.opacity(0.55) : Color.clear)
+                        .frame(width: dot, height: dot)
+                        .overlay(
+                            Circle().stroke(
+                                Color.secondary.opacity(reached ? 0 : 0.32),
+                                lineWidth: 1.1
+                            )
+                        )
+                        .offset(x: cx - dot / 2, y: (badge - dot) / 2)
+                }
 
-                    // Step dots
-                    HStack(spacing: 0) {
-                        ForEach(0...3, id: \.self) { i in
-                            let active = (i + 1) <= step && !isCancelled
-                            Circle()
-                                .fill(active ? theme.accent : Color.clear)
-                                .frame(width: 11, height: 11)
-                                .overlay(
-                                    Circle().stroke(
-                                        active ? theme.accent : Color.secondary.opacity(0.35),
-                                        lineWidth: 1.5
-                                    )
-                                )
-                                .shadow(color: active ? theme.accent.opacity(0.45) : .clear, radius: 4)
-                            if i < 3 { Spacer() }
-                        }
-                    }
+                // Moving Y badge — the primary visual indicator
+                if !isCancelled {
+                    Text("Y")
+                        .font(.system(size: 8, weight: .black))
+                        .foregroundStyle(.white)
+                        .frame(width: badge, height: badge)
+                        .background(Circle().fill(theme.gradient))
+                        .overlay(Circle().stroke(Color.white.opacity(0.28), lineWidth: 1.2))
+                        .shadow(color: theme.accent.opacity(0.55), radius: 6)
+                        .offset(x: badgeX)
+                        .animation(.spring(duration: 0.65, bounce: 0.18), value: badgeX)
                 }
             }
-            .frame(height: 11)
+            .frame(height: 20)
 
-            // Labels
+            // Labels row — "On Way" gains a distance subtitle while driving
             HStack(spacing: 0) {
                 ForEach(labels.indices, id: \.self) { i in
-                    Text(labels[i])
-                        .font(.system(size: 9, weight: (i + 1) == step ? .bold : .regular))
-                        .foregroundStyle(
-                            (i + 1) <= step && !isCancelled
-                                ? theme.accent
-                                : Color.secondary.opacity(0.48)
-                        )
-                    if i < labels.count - 1 { Spacer() }
+                    let isCurrent = (i + 1) == step || (isDelivered && i == 3)
+                    let isPast    = !isCancelled && (i + 1) < step
+                    VStack(spacing: 1) {
+                        Text(labels[i])
+                            .font(.system(size: 9, weight: isCurrent ? .bold : .regular))
+                            .foregroundStyle(
+                                (isCurrent || isPast) && !isCancelled
+                                    ? theme.accent
+                                    : Color.secondary.opacity(0.48)
+                            )
+                        if i == 2, step == 3, let dist = distanceText {
+                            Text(dist)
+                                .font(.system(size: 7, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                    }
+                    if i < labels.count - 1 { Spacer(minLength: 0) }
                 }
             }
         }

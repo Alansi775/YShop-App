@@ -78,6 +78,33 @@ struct StoreDetailView: View {
             }
             loadProducts()
         }
+        // Socket.IO event: admin changed/deleted a product — update list in-place
+        .onReceive(NotificationCenter.default.publisher(for: .yshopProductChanged)) { notification in
+            guard let info = notification.userInfo else { return }
+            let action    = info["action"]    as? String ?? ""
+            let productId = info["productId"] as? String ?? ""
+            let storeId   = info["storeId"]   as? String ?? ""
+            let status    = info["status"]    as? String ?? ""
+
+            // Only care if the changed product belongs to this store
+            guard storeId == String(store.id) || storeId.isEmpty else { return }
+
+            let isVisible = status.lowercased() == "approved"
+
+            switch action {
+            case "product_deleted":
+                products.removeAll { String($0.id) == productId }
+            case "product_updated" where !isVisible:
+                products.removeAll { String($0.id) == productId }
+            default:
+                // Product approved / created → refresh list to include the new one
+                AppCache.shared.invalidate(.products(storeId: store.id))
+                loadProducts()
+                return
+            }
+            // Keep cache in sync with current UI state
+            AppCache.shared.set(.products(storeId: store.id), value: products)
+        }
     }
     
     // MARK: - Components
