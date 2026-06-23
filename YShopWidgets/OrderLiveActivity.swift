@@ -21,6 +21,9 @@ struct StepTheme {
         case 1:   // Placed — amber
             return .init(accent: Color(red: 1.00, green: 0.62, blue: 0.04),
                          deep:   Color(red: 0.82, green: 0.38, blue: 0.00))
+        case 2 where s.isConfirmed:   // Confirmed — blue (matches tracking icon)
+            return .init(accent: Color(red: 0.20, green: 0.47, blue: 0.96),
+                         deep:   Color(red: 0.08, green: 0.26, blue: 0.76))
         case 2:   // Preparing — violet
             return .init(accent: Color(red: 0.68, green: 0.34, blue: 0.97),
                          deep:   Color(red: 0.42, green: 0.16, blue: 0.78))

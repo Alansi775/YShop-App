@@ -142,6 +142,7 @@ final class LiveActivityManager {
             storeType: order.storeType ?? "Food",
             isDelivered: order.status == .delivered,
             isCancelled: order.status == .cancelled || order.status == .failed,
+            isConfirmed: order.status == .confirmed,
             proximityFraction: proximityFraction,
             distanceText: distanceText
         )
