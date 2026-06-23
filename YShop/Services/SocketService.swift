@@ -109,7 +109,8 @@ class SocketService: NSObject, ObservableObject {
                 }
                 DispatchQueue.main.async { self?.receiveLoop() }
 
-            case .failure:
+            case .failure(let err):
+                print("[Socket] ❌ WebSocket error: \(err.localizedDescription)")
                 DispatchQueue.main.async {
                     self?.isConnected = false
                     self?.scheduleReconnect()
@@ -163,7 +164,12 @@ class SocketService: NSObject, ObservableObject {
         switch first {
         case "0":
             // Namespace connected: "0" or "0{...}"
+            let wasConnected = isConnected
             isConnected = true
+            print("[Socket] ✅ Connected to server\(wasConnected ? " (was already connected)" : " (reconnected)")")
+            if !wasConnected {
+                NotificationCenter.default.post(name: .yshopSocketReconnected, object: nil)
+            }
         case "2":
             // Socket.IO event: "2["eventName", {...}]"
             decodeEvent(String(payload.dropFirst()))
@@ -178,11 +184,18 @@ class SocketService: NSObject, ObservableObject {
               array.count >= 2,
               let payloadDict = array[1] as? [String: Any],
               let payloadData = try? JSONSerialization.data(withJSONObject: payloadDict)
-        else { return }
+        else {
+            print("[Socket] ⚠️ decodeEvent: failed to parse JSON array from: \(String(jsonStr.prefix(120)))")
+            return
+        }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard let envelope = try? decoder.decode(SocketMessageEnvelope.self, from: payloadData) else { return }
+        guard let envelope = try? decoder.decode(SocketMessageEnvelope.self, from: payloadData) else {
+            print("[Socket] ⚠️ decodeEvent: SocketMessageEnvelope decode failed for payload: \(String(jsonStr.prefix(120)))")
+            return
+        }
+        print("[Socket] ✅ Event received — type=\(envelope.type ?? "nil") orderId=\(envelope.orderId ?? envelope.id ?? "nil") storeId=\(envelope.storeId ?? "nil") status=\(envelope.status ?? "nil")")
         dispatch(envelope)
     }
 
@@ -197,8 +210,7 @@ class SocketService: NSObject, ObservableObject {
             }
 
         case "order_updated", "order_created":
-            let oid = (e.order ?? e.data ?? e.payload)?.id
-                   ?? e.orderId ?? e.id ?? e.orderID
+            let oid = e.orderId ?? e.id ?? e.orderID
             if let oid {
                 AppCache.shared.invalidate(.userOrders)
                 AppCache.shared.invalidate(.activeOrder(id: oid))
@@ -276,13 +288,14 @@ class SocketService: NSObject, ObservableObject {
 
 // MARK: - Message envelope
 
+// Lightweight envelope — never tries to decode a full Order object.
+// The backend sends order.id as an integer in the nested "order" field,
+// which would cause a type mismatch against Order.id: String and silently
+// nil-out the entire decode. We only need the top-level string IDs.
 private struct SocketMessageEnvelope: Decodable {
     let id: String?
     let orderId: String?
     let orderID: String?
-    let order: Order?
-    let data: Order?
-    let payload: Order?
     let type: String?
     let driverLocation: String?
     let storeType: String?
@@ -293,10 +306,7 @@ private struct SocketMessageEnvelope: Decodable {
     enum CodingKeys: String, CodingKey {
         case id
         case orderId
-        case orderID      = "order_id"
-        case order
-        case data
-        case payload
+        case orderID        = "order_id"
         case type
         case driverLocation = "driver_location"
         case storeType      = "store_type"
@@ -304,12 +314,37 @@ private struct SocketMessageEnvelope: Decodable {
         case productId      = "product_id"
         case status
     }
+
+    // Custom init so that `id` is parsed tolerantly (String or Int).
+    // All fields use try? so a single bad value never kills the whole decode.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+
+        // id may arrive as "123" or 123
+        if let s = try? c.decode(String.self, forKey: .id) {
+            id = s
+        } else if let n = try? c.decode(Int.self, forKey: .id) {
+            id = String(n)
+        } else {
+            id = nil
+        }
+
+        orderId        = try? c.decode(String.self, forKey: .orderId)
+        orderID        = try? c.decode(String.self, forKey: .orderID)
+        type           = try? c.decode(String.self, forKey: .type)
+        driverLocation = try? c.decode(String.self, forKey: .driverLocation)
+        storeType      = try? c.decode(String.self, forKey: .storeType)
+        storeId        = try? c.decode(String.self, forKey: .storeId)
+        productId      = try? c.decode(String.self, forKey: .productId)
+        status         = try? c.decode(String.self, forKey: .status)
+    }
 }
 
 // MARK: - Notification names
 
 extension Notification.Name {
-    static let yshopOrderUpdated   = Notification.Name("yshop.orderUpdated")
-    static let yshopStoreChanged   = Notification.Name("yshop.storeChanged")
-    static let yshopProductChanged = Notification.Name("yshop.productChanged")
+    static let yshopOrderUpdated    = Notification.Name("yshop.orderUpdated")
+    static let yshopStoreChanged    = Notification.Name("yshop.storeChanged")
+    static let yshopProductChanged  = Notification.Name("yshop.productChanged")
+    static let yshopSocketReconnected = Notification.Name("yshop.socketReconnected")
 }

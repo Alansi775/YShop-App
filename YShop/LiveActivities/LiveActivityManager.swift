@@ -12,16 +12,23 @@ final class LiveActivityManager {
     // MARK: - Start
 
     func start(for order: Order) {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        let areEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+        print("[LiveActivity] start() — orderId=\(order.id) status=\(order.status.rawValue) areActivitiesEnabled=\(areEnabled)")
+        guard areEnabled else {
+            print("[LiveActivity] ⚠️ Live Activities disabled in device settings")
+            return
+        }
 
         // If one already running for this order, just update it
         if let existing = Activity<OrderLiveActivityAttributes>.activities.first(where: {
             $0.attributes.orderNumber == "#\(order.id)"
         }) {
+            print("[LiveActivity] ✅ Found existing activity — updating content (status=\(order.status.rawValue))")
             activity = existing
             update(with: order)
             return
         }
+        print("[LiveActivity] 🆕 No existing activity found — creating new one")
 
         let attrs = OrderLiveActivityAttributes(
             orderNumber: "#\(order.id)",
@@ -65,25 +72,45 @@ final class LiveActivityManager {
         orderId: String
     ) {
         Task {
+            print("[LiveActivity] 🔑 Listening for push token updates for order \(orderId)...")
             for await tokenData in activity.pushTokenUpdates {
                 let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                print("[LiveActivity] 🔑 Got push token for order \(orderId): \(token.prefix(16))...")
                 struct Body: Encodable { let pushToken: String }
                 struct Empty: Decodable {}
                 let _: Empty? = try? await APIClient.shared.request(
                     .saveLiveActivityToken(orderId),
                     body: Body(pushToken: token)
                 )
+                print("[LiveActivity] ✅ Push token saved to backend for order \(orderId)")
             }
+            print("[LiveActivity] 🔑 Push token stream ended for order \(orderId)")
         }
     }
 
     // MARK: - Update
 
     func update(with order: Order) {
-        guard let activity else { return }
+        // If we lost the in-memory reference (app restart, session boundary), recover it from
+        // ActivityKit's global list before giving up — the OS keeps the activity alive even when
+        // our Swift object is gone.
+        if activity == nil {
+            activity = Activity<OrderLiveActivityAttributes>.activities.first(where: {
+                $0.attributes.orderNumber == "#\(order.id)"
+            })
+            if activity != nil {
+                print("[LiveActivity] 🔁 Recovered activity reference from ActivityKit for order \(order.id)")
+            }
+        }
+        guard let activity else {
+            print("[LiveActivity] ⚠️ update() — no activity exists for order \(order.id)")
+            return
+        }
         let state = contentState(from: order)
+        print("[LiveActivity] 🔄 Updating activity — orderId=\(order.id) status=\(order.status.rawValue)")
         Task {
             await activity.update(ActivityContent(state: state, staleDate: .now + 3600))
+            print("[LiveActivity] ✅ Activity content updated")
         }
     }
 

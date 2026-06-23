@@ -16,10 +16,53 @@ final class CartManager: ObservableObject {
     @Published private(set) var activeTrackingOrder: Order?
 
     private var orderUpdateObserver: NSObjectProtocol?
+    private var pollingTask: Task<Void, Never>?
 
     private init() {
         lastOrderId = UserDefaults.standard.string(forKey: lastOrderIdKey)
         startListeningForOrderUpdates()
+        startListeningForSocketReconnect()
+        startPollingFallback()
+        restoreLiveActivityOnLaunch()
+    }
+
+    // On app launch, if we have a known active order, sync the Live Activity immediately.
+    // This ensures the Live Activity reflects the real status even if it was changed while
+    // the app was terminated — without waiting for the user to open the tracking screen.
+    private func restoreLiveActivityOnLaunch() {
+        guard lastOrderId != nil else { return }
+        Task {
+            await refreshActiveTrackingOrder()
+            if let order = activeTrackingOrder {
+                LiveActivityManager.shared.start(for: order)
+                print("[CartManager] 🚀 Restored Live Activity on launch — order=\(order.id) status=\(order.status.rawValue)")
+            }
+        }
+    }
+
+    // Polls the active order every 15s as fallback when socket events are missed.
+    // This ensures the tracking icon and Live Activity always reflect the real status,
+    // even on unstable networks where socket events are dropped.
+    private func startPollingFallback() {
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                guard !Task.isCancelled else { break }
+                await MainActor.run { [weak self] in
+                    guard let self, self.lastOrderId != nil || self.activeTrackingOrder != nil else { return }
+                    Task {
+                        let previousStatus = self.activeTrackingOrder?.status
+                        await self.refreshActiveTrackingOrder()
+                        guard let order = self.activeTrackingOrder else { return }
+                        LiveActivityManager.shared.update(with: order)
+                        if order.status != previousStatus {
+                            print("[CartManager] 📊 Poll detected status change: \(previousStatus?.rawValue ?? "nil") → \(order.status.rawValue)")
+                            self.scheduleOrderStatusNotification(order: order, newStatus: order.status)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Automatically refresh the active order and Live Activity whenever the
@@ -38,23 +81,48 @@ final class CartManager: ObservableObject {
         }
     }
 
+    // When socket reconnects after a brief disconnect, refresh the active order so any
+    // status change that arrived while we were offline is reflected immediately.
+    private func startListeningForSocketReconnect() {
+        NotificationCenter.default.addObserver(
+            forName: .yshopSocketReconnected,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard self.lastOrderId != nil || self.activeTrackingOrder != nil else { return }
+                await self.refreshActiveTrackingOrder()
+                if let order = self.activeTrackingOrder {
+                    LiveActivityManager.shared.start(for: order)
+                }
+            }
+        }
+    }
+
     private func handleSocketOrderUpdate(_ incomingId: String?) async {
-        // Capture previous status before refresh so we can detect changes
         let previousStatus = activeTrackingOrder?.status
+
+        print("[CartManager] 📡 Socket order update — orderId=\(incomingId ?? "nil") previousStatus=\(previousStatus?.rawValue ?? "nil")")
 
         AppCache.shared.invalidate(.userOrders)
         if let id = incomingId { AppCache.shared.invalidate(.activeOrder(id: id)) }
 
         await refreshActiveTrackingOrder()
 
-        guard let order = activeTrackingOrder else { return }
+        guard let order = activeTrackingOrder else {
+            print("[CartManager] ⚠️ No active order after refresh")
+            return
+        }
 
-        // Update Live Activity without waiting for APNs
+        print("[CartManager] ✅ Active order — id=\(order.id) status=\(order.status.rawValue)")
+
+        // Update the Live Activity with the new order state
         LiveActivityManager.shared.update(with: order)
 
         // Schedule a local notification if status changed
-        // This fires even when OrderTrackingView is closed
         if order.status != previousStatus {
+            print("[CartManager] 🔔 Status changed \(previousStatus?.rawValue ?? "nil") → \(order.status.rawValue)")
             scheduleOrderStatusNotification(order: order, newStatus: order.status)
         }
     }
