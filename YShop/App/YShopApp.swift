@@ -33,23 +33,32 @@ struct YShopApp: App {
                 // Main Content: always show the root coordinator (handles splash -> routing)
                 YShopRootView()
                 
-                // Offline Banner
-                if !networkMonitor.isConnected {
-                    VStack {
-                        HStack {
+                // Offline banner — a floating capsule below the notch, matching
+                // the native iOS "system alert" style (AirDrop/Live Activity
+                // bubbles), not an old full-width colored bar.
+                VStack {
+                    if !networkMonitor.isConnected {
+                        HStack(spacing: 8) {
                             Image(systemName: "wifi.slash")
-                                .foregroundColor(.white)
-                            Text("No Internet")
-                                .foregroundColor(.white)
                                 .font(.system(size: 13, weight: .semibold))
-                            Spacer()
+                            Text("No Connection")
+                                .font(.system(size: 13, weight: .semibold))
                         }
-                        .padding(12)
-                        .background(Color.red.opacity(0.9))
-                        Spacer()
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial.opacity(0.001), in: Capsule())
+                        .background(Color.black.opacity(0.82), in: Capsule())
+                        .overlay(
+                            Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                        )
+                        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
-                    .ignoresSafeArea(edges: .top)
+                    Spacer()
                 }
+                .animation(.spring(response: 0.4, dampingFraction: 0.75), value: networkMonitor.isConnected)
             }
             .environmentObject(authManager)
             .environmentObject(cartManager)

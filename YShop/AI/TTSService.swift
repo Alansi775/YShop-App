@@ -30,7 +30,7 @@ final class TTSService: NSObject, ObservableObject {
     /// Callers can safely start STT after this without interrupting audio.
     func speak(_ rawText: String, mood: String = "neutral", energy: Double = 0.65) async {
         let text = prepare(rawText, mood: mood)
-        guard !text.isEmpty, !AIConfig.ttsKey.isEmpty else { return }
+        guard !text.isEmpty else { return }
 
         let truncated = String(text.prefix(AIConfig.ttsMaxChars))
         let key = cacheKey(truncated, mood: mood, energy: energy)
@@ -79,15 +79,19 @@ final class TTSService: NSObject, ObservableObject {
 
     private func fetchAudio(text: String, mood: String, energy: Double) async -> Data? {
         let profile = voiceProfile(mood: mood, energy: energy)
-        guard let url = URL(string: "\(AIConfig.ttsBaseURL)/text-to-speech/\(activeVoice.id)") else { return nil }
+        // Server-side proxy — the provider key lives only in the backend's
+        // environment and never ships inside the app binary.
+        guard let token = AuthManager.shared.token,
+              let url = URL(string: "\(AppConstants.baseURL)/ai/speak") else { return nil }
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
-        req.setValue(AIConfig.ttsKey,    forHTTPHeaderField: "xi-api-key")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("audio/mpeg",       forHTTPHeaderField: "Accept")
         req.timeoutInterval = 15
         req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "voiceId": activeVoice.id,
             "text": text,
             "model_id": AIConfig.ttsModelID,
             "voice_settings": [

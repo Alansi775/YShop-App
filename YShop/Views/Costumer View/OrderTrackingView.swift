@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import UserNotifications
+import Kingfisher
 
 struct OrderTrackingView: View {
     let orderId: String
@@ -398,18 +399,15 @@ struct OrderTrackingView: View {
     private var storeIconView: some View {
         Group {
             if let iconUrl = store?.fullIconUrl, let url = URL(string: iconUrl) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 44, height: 44)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    default:
-                        placeholderStoreIcon
-                    }
-                }
+                // KFImage (Kingfisher) instead of AsyncImage — disk+memory
+                // cached, so reopening this screen doesn't refetch the same
+                // store icon from the server every time.
+                KFImage(url)
+                    .placeholder { placeholderStoreIcon }
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 placeholderStoreIcon
             }
@@ -593,17 +591,15 @@ struct OrderTrackingView: View {
                     }
                 } label: {
                     HStack(spacing: 12) {
-                        AsyncImage(url: URL(string: item.fullImageUrl ?? "")) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().scaledToFill()
-                            default:
+                        KFImage(URL(string: item.fullImageUrl ?? ""))
+                            .placeholder {
                                 Color(.secondarySystemBackground)
                                     .overlay(Image(systemName: "photo").foregroundColor(Color(.tertiaryLabel)))
                             }
-                        }
-                        .frame(width: 54, height: 54)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 54, height: 54)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(item.displayName)

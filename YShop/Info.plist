@@ -3,14 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>API_BASE_HOST</key>
-	<string>http://192.168.1.94:3000</string>
+	<string>https://yshop-imac.tail11c7de.ts.net</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	<key>YSHOP_TTS_KEY</key>
-	<string>$(YSHOP_TTS_KEY)</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>

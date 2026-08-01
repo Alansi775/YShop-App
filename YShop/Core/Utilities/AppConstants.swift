@@ -3,8 +3,9 @@ import Foundation
 struct AppConstants {
     // MARK: - API Configuration
     private static let defaultAPIPrefix = "/api/v1"
-    // Fallback IP — updated by start.sh on each server launch
-    private static let defaultDeviceHost = "http://Mohammeds-Mackbook-MacBook-Air.local:3000"
+    // Stable production backend (Tailscale Funnel, HTTPS). Overridable via
+    // Info.plist API_BASE_HOST or the API_BASE_URL env var (CI / Xcode scheme).
+    private static let defaultDeviceHost = "https://yshop-imac.tail11c7de.ts.net"
 
     static let baseURL: String = {
         baseURLCandidates.first ?? "http://localhost:3000/api/v1"

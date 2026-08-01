@@ -1,14 +1,8 @@
 import Foundation
 
 struct AIConfig {
-    // Add YSHOP_TTS_KEY to your Xcode scheme env vars (Product > Scheme > Edit Scheme > Run > Environment Variables)
-    // or to Info.plist — never hardcode keys in source files
-    static var ttsKey: String {
-        ProcessInfo.processInfo.environment["YSHOP_TTS_KEY"]
-            ?? (Bundle.main.object(forInfoDictionaryKey: "YSHOP_TTS_KEY") as? String ?? "")
-    }
-
-    static let ttsBaseURL   = "https://api.elevenlabs.io/v1"
+    // Voice synthesis goes through our own backend's /ai/speak proxy
+    // (see TTSService.fetchAudio) — no provider key or URL needed client-side.
     static let ttsModelID   = "eleven_turbo_v2_5"
     static let ttsMaxChars  = 300
 
