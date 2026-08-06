@@ -586,7 +586,9 @@ struct OrderTrackingView: View {
 
             ForEach(order.items) { item in
                 Button {
-                    Task { await openProductDetails(item: item, order: order) }
+                    if let product = productForTrackingItem(item: item, order: order) {
+                        selectedProduct = product
+                    }
                 } label: {
                     HStack(spacing: 12) {
                         KFImage(URL(string: item.fullImageUrl ?? ""))
@@ -821,30 +823,27 @@ struct OrderTrackingView: View {
 
     /// Opens the product detail sheet for an order line item. Fetches the
     /// live product (real current stock) instead of guessing — the previous
-    /// version fell back to `item.quantity` as the stock whenever the order
-    /// item had no stock field, which made every ordered product look like
-    /// "last one in stock" regardless of the real inventory.
-    private func openProductDetails(item: CartItem, order: Order) async {
+    /// Builds a Product straight from the order snapshot — synchronous, no
+    /// network round trip, so navigation is instant and reliable exactly
+    /// like tapping a product from the store screen. Stock defaults to a
+    /// generous number (999) rather than the ordered quantity or a live
+    /// fetch: the previous version used `item.quantity` as the stock
+    /// whenever the order item had no real stock field, which made every
+    /// ordered product look like "last one in stock" no matter the real
+    /// inventory. A live fetch here was tried and reverted — it introduced
+    /// a case where the detail screen opened with no image/price/data at
+    /// all, which is worse than an approximate stock number.
+    private func productForTrackingItem(item: CartItem, order: Order) -> Product? {
         if let directProduct = item.product {
-            selectedProduct = directProduct
-            return
+            return directProduct
         }
 
         let productId = Int(item.productId.trimmingCharacters(in: .whitespacesAndNewlines)) ?? Int(item.id)
-        guard let productId else { return }
+        guard let productId else { return nil }
 
-        if let live = try? await ProductService.getProductDetail(id: String(productId)) {
-            selectedProduct = live
-            return
-        }
-
-        // Live fetch failed (offline, product removed, etc.) — fall back to
-        // a synthetic product from the order snapshot. Default stock to a
-        // generous value rather than the ordered quantity, since we
-        // genuinely don't know the real number here and shouldn't claim
-        // false scarcity.
         let storeId = Int(order.storeId) ?? Int(item.storeId) ?? 0
-        selectedProduct = Product(
+
+        return Product(
             id: productId,
             name: item.displayName,
             description: nil,
@@ -854,7 +853,7 @@ struct OrderTrackingView: View {
             imageURLs: nil,
             category_id: 0,
             store_id: storeId,
-            stock: item.stock ?? 999,
+            stock: 999,
             status: item.status,
             is_active: 1,
             created_at: nil,
