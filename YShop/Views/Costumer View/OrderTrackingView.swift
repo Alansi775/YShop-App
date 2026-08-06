@@ -586,9 +586,7 @@ struct OrderTrackingView: View {
 
             ForEach(order.items) { item in
                 Button {
-                    if let product = productForTrackingItem(item: item, order: order) {
-                        selectedProduct = product
-                    }
+                    Task { await openProductDetails(item: item, order: order) }
                 } label: {
                     HStack(spacing: 12) {
                         KFImage(URL(string: item.fullImageUrl ?? ""))
@@ -821,18 +819,32 @@ struct OrderTrackingView: View {
         }
     }
 
-    private func productForTrackingItem(item: CartItem, order: Order) -> Product? {
+    /// Opens the product detail sheet for an order line item. Fetches the
+    /// live product (real current stock) instead of guessing — the previous
+    /// version fell back to `item.quantity` as the stock whenever the order
+    /// item had no stock field, which made every ordered product look like
+    /// "last one in stock" regardless of the real inventory.
+    private func openProductDetails(item: CartItem, order: Order) async {
         if let directProduct = item.product {
-            return directProduct
+            selectedProduct = directProduct
+            return
         }
 
         let productId = Int(item.productId.trimmingCharacters(in: .whitespacesAndNewlines)) ?? Int(item.id)
-        guard let productId else { return nil }
+        guard let productId else { return }
 
+        if let live = try? await ProductService.getProductDetail(id: String(productId)) {
+            selectedProduct = live
+            return
+        }
+
+        // Live fetch failed (offline, product removed, etc.) — fall back to
+        // a synthetic product from the order snapshot. Default stock to a
+        // generous value rather than the ordered quantity, since we
+        // genuinely don't know the real number here and shouldn't claim
+        // false scarcity.
         let storeId = Int(order.storeId) ?? Int(item.storeId) ?? 0
-        let stock = max(item.stock ?? item.quantity, item.quantity)
-
-        return Product(
+        selectedProduct = Product(
             id: productId,
             name: item.displayName,
             description: nil,
@@ -842,7 +854,7 @@ struct OrderTrackingView: View {
             imageURLs: nil,
             category_id: 0,
             store_id: storeId,
-            stock: stock,
+            stock: item.stock ?? 999,
             status: item.status,
             is_active: 1,
             created_at: nil,
