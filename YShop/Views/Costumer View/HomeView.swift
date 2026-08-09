@@ -45,7 +45,6 @@ struct HomeView: View {
     // working category swipe already uses) gets through fine, so this
     // drives the reveal by hand instead of fighting the native ScrollView.
     @State private var heroScrollOffset: CGFloat = 0
-    @GestureState private var heroDragState: CGFloat = 0
 
     let heroProducts = [
         HeroProduct(name: "PREMIUM FOOD",  subtitle: "Gourmet Excellence",  imagePath: "9",    gradient: [Color(red: 0.16, green: 0.09, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)], category: "Food",     icon: "fork.knife"),
@@ -297,37 +296,33 @@ struct HomeView: View {
 
                         videoSection
                 }
-                .offset(y: heroScrollOffset + heroDragState)
+                .offset(y: heroScrollOffset)
                 .frame(height: outerGeo.size.height, alignment: .top)
                 .clipped()
                 .contentShape(Rectangle())
-                // Drag-to-reveal: the finger directly drives the offset
-                // (clamped between fully-collapsed and fully-revealed), no
-                // momentum/inertia — simple and predictable, and critically
-                // it's a plain SwiftUI DragGesture rather than a
-                // ScrollView's native pan, so it isn't swallowed by the
-                // nested TabView the way ScrollView's gesture was.
-                .gesture(
-                    DragGesture(minimumDistance: 8)
-                        .updating($heroDragState) { value, state, _ in
-                            let h = value.translation.width
-                            let v = value.translation.height
-                            guard abs(v) >= abs(h) else { return }
-                            let proposed = heroScrollOffset + v
-                            let clamped = min(0, max(-videoSectionHeight, proposed))
-                            state = clamped - heroScrollOffset
+                // Swipe-to-reveal, snap-based — deliberately matching the
+                // EXACT gesture pattern the horizontal category swipe above
+                // already uses and is confirmed working (simultaneousGesture
+                // + onEnded only, threshold-based). An earlier version used
+                // DragGesture's `.updating()` + `@GestureState` for a live
+                // finger-follow effect, and that combination silently never
+                // fired in this nested-TabView layout even though the
+                // onEnded-only pattern does — so this trades live tracking
+                // for reliability. Swipe up reveals the videos, swipe down
+                // collapses back to the hero.
+                .simultaneousGesture(DragGesture().onEnded { value in
+                    let h = value.translation.width
+                    let v = value.translation.height
+                    guard abs(v) > abs(h) else { return }
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                        if v < -40 {
+                            heroScrollOffset = -videoSectionHeight
+                        } else if v > 40 {
+                            heroScrollOffset = 0
                         }
-                        .onEnded { value in
-                            let h = value.translation.width
-                            let v = value.translation.height
-                            guard abs(v) >= abs(h) else { return }
-                            let proposed = heroScrollOffset + v
-                            withAnimation(.interactiveSpring()) {
-                                heroScrollOffset = min(0, max(-videoSectionHeight, proposed))
-                            }
-                            handleHeroScrollOffset(heroScrollOffset)
-                        }
-                )
+                    }
+                    handleHeroScrollOffset(heroScrollOffset)
+                })
             }
         }
     }
