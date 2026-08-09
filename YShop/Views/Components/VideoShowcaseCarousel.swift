@@ -2,12 +2,13 @@
 //
 // Cover-flow style video carousel — matches the design ported into the
 // Flutter/web app: wide 16:9 cards, adjacent cards peeking in on both
-// sides (scaled down + dimmed), arrow buttons floating over the peek
-// area, bottom-center text overlay (small uppercase kicker, bold title,
-// "Learn More" / "Shop Now" links) over a gradient scrim, and pill-style
-// pagination dots below the carousel. Only the centered card actually
-// plays; the rest sit paused. Placeholder footage (Resources/Videos/) —
-// swap for real product videos whenever they're ready, same view either way.
+// sides (scaled down + dimmed), swipe-only navigation (no arrow buttons —
+// keeps the card area uncluttered), bottom-center text overlay (small
+// uppercase kicker, bold title, "Learn More" / "Shop Now" links) over a
+// gradient scrim, and pill-style pagination dots below the carousel. Only
+// the centered card actually plays; the rest sit paused. Placeholder
+// footage (Resources/Videos/) — swap for real product videos whenever
+// they're ready, same view either way.
 import SwiftUI
 import AVFoundation
 
@@ -57,26 +58,18 @@ struct VideoShowcaseCarousel: View {
             let middleIndex = Double(items.count - 1) / 2.0
 
             VStack(spacing: 14) {
-                ZStack {
-                    HStack(spacing: spacing) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-                            let delta = abs(Double(i - currentIndex))
-                            VideoShowcaseCard(item: item, isActive: i == currentIndex)
-                                .frame(width: cardWidth, height: cardHeight)
-                                .scaleEffect(1 - min(delta, 1) * 0.14)
-                                .opacity(1 - min(delta, 1) * 0.65)
-                        }
-                    }
-                    .frame(width: geo.size.width, alignment: .center)
-                    .offset(x: CGFloat(middleIndex - Double(currentIndex)) * (cardWidth + spacing))
-                    .animation(.easeOut(duration: 0.45), value: currentIndex)
-
-                    HStack {
-                        CarouselArrowButton(systemName: "chevron.left") { go(-1) }
-                        Spacer()
-                        CarouselArrowButton(systemName: "chevron.right") { go(1) }
+                HStack(spacing: spacing) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { i, item in
+                        let delta = abs(Double(i - currentIndex))
+                        VideoShowcaseCard(item: item, isActive: i == currentIndex)
+                            .frame(width: cardWidth, height: cardHeight)
+                            .scaleEffect(1 - min(delta, 1) * 0.14)
+                            .opacity(1 - min(delta, 1) * 0.65)
                     }
                 }
+                .frame(width: geo.size.width, alignment: .center)
+                .offset(x: CGFloat(middleIndex - Double(currentIndex)) * (cardWidth + spacing))
+                .animation(.easeOut(duration: 0.45), value: currentIndex)
                 .frame(width: geo.size.width, height: cardHeight)
                 .clipped()
                 .contentShape(Rectangle())
@@ -111,25 +104,6 @@ struct VideoShowcaseCarousel: View {
     private func go(_ delta: Int) {
         let count = items.count
         currentIndex = ((currentIndex + delta) % count + count) % count
-    }
-}
-
-private struct CarouselArrowButton: View {
-    let systemName: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 44, height: 44)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
-                .background(Circle().fill(Color.black.opacity(0.2)))
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 4)
     }
 }
 

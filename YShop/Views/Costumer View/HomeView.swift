@@ -35,6 +35,7 @@ struct HomeView: View {
     @State private var navigateToCategoryStores = false
     @State private var showLoginScreen = false
     @State private var resumeAIAfterLogin = false
+    @State private var isScrolledToVideos = false
 
     let heroProducts = [
         HeroProduct(name: "PREMIUM FOOD",  subtitle: "Gourmet Excellence",  imagePath: "9",    gradient: [Color(red: 0.16, green: 0.09, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)], category: "Food",     icon: "fork.knife"),
@@ -142,7 +143,7 @@ struct HomeView: View {
                 } else if width < -50 {
                     changeProduct((currentHeroIndex + 1) % heroProducts.count)
                 }
-            })
+            }, onScrollOffsetChanged: handleHeroScrollOffset)
         }
         .overlay(alignment: .bottom) {
             AppleStretchyTabBar(
@@ -176,13 +177,13 @@ struct HomeView: View {
             } else if width < -50 {
                 changeProduct((index + 1) % heroProducts.count)
             }
-        })
+        }, onScrollOffsetChanged: handleHeroScrollOffset)
     }
 
     // MARK: - Hero Content (shared)
 
     @ViewBuilder
-    private func heroPageContent(_ hero: HeroProduct, onHorizontalSwipe: @escaping (CGFloat) -> Void) -> some View {
+    private func heroPageContent(_ hero: HeroProduct, onHorizontalSwipe: @escaping (CGFloat) -> Void, onScrollOffsetChanged: @escaping (CGFloat) -> Void) -> some View {
         ZStack {
             LinearGradient(
                 gradient: Gradient(colors: hero.gradient),
@@ -200,9 +201,18 @@ struct HomeView: View {
             // the screen height directly made the hero taller than the
             // visible page, pushing Explore/the hero text below the fold.
             GeometryReader { outerGeo in
-                ScrollViewReader { scrollProxy in
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
+                        // Invisible marker reporting how far the content has
+                        // scrolled — drives the auto-rotate pause below.
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: HeroScrollOffsetKey.self,
+                                value: proxy.frame(in: .named("heroScroll")).minY
+                            )
+                        }
+                        .frame(height: 0)
+
                         VStack(spacing: 0) {
                             Spacer()
 
@@ -276,31 +286,29 @@ struct HomeView: View {
                         // drag over the videos never also changes category.
                         // simultaneousGesture (not gesture) so the
                         // ScrollView's own vertical pan still works here too.
+                        //
+                        // Critical bit: only act if the drag was actually
+                        // predominantly HORIZONTAL. The old version only
+                        // checked translation.width, so a mostly-vertical
+                        // swipe-up (trying to scroll to the videos) with
+                        // even a slight sideways drift past the 50pt
+                        // threshold got misread as a category swipe — which
+                        // swaps to a fresh page whose ScrollView resets to
+                        // the top, making it *look* like scrolling "didn't
+                        // work" when it was actually being hijacked on
+                        // nearly every attempt.
                         .simultaneousGesture(DragGesture().onEnded { value in
-                            onHorizontalSwipe(value.translation.width)
+                            let h = value.translation.width
+                            let v = value.translation.height
+                            guard abs(h) > abs(v) else { return }
+                            onHorizontalSwipe(h)
                         })
-                        .overlay(alignment: .bottom) {
-                            // The hero screen sits inside a TabView nested in
-                            // another TabView (category pager inside the
-                            // customer tab bar) — that combination is known
-                            // to swallow a plain swipe-up before it reaches
-                            // this ScrollView on some iOS versions, so this
-                            // tap target guarantees the videos are always
-                            // reachable even if the native swipe doesn't
-                            // register.
-                            ScrollDownHint {
-                                withAnimation(.easeInOut(duration: 0.5)) {
-                                    scrollProxy.scrollTo("videoSection", anchor: .top)
-                                }
-                            }
-                            .padding(.bottom, 10)
-                        }
 
                         videoSection
-                            .id("videoSection")
                     }
                 }
-                }
+                .coordinateSpace(name: "heroScroll")
+                .onPreferenceChange(HeroScrollOffsetKey.self) { onScrollOffsetChanged($0) }
             }
         }
     }
@@ -336,9 +344,34 @@ struct HomeView: View {
 
     private func startAutoRotate() {
         heroTimer?.invalidate()
+        // Don't re-arm while the user is down watching videos — see
+        // handleHeroScrollOffset.
+        guard !isScrolledToVideos else { return }
         heroTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
             changeProduct((currentHeroIndex + 1) % heroProducts.count)
         }
+    }
+
+    // Pauses the hero auto-rotate while the user has scrolled down to the
+    // video section — otherwise the category could change underneath them
+    // every few seconds, swapping to a different page's ScrollView (which
+    // resets to the top) and yanking them back up mid-video.
+    private func handleHeroScrollOffset(_ offset: CGFloat) {
+        let scrolledDown = offset < -120
+        guard scrolledDown != isScrolledToVideos else { return }
+        isScrolledToVideos = scrolledDown
+        if scrolledDown {
+            heroTimer?.invalidate()
+        } else {
+            startAutoRotate()
+        }
+    }
+}
+
+private struct HeroScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
@@ -439,33 +472,6 @@ private struct AIAskBar: View {
     }
 }
 
-// MARK: - Scroll Down Hint
-
-private struct ScrollDownHint: View {
-    let action: () -> Void
-    @State private var floatDown = false
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 2) {
-                Text("WATCH & SHOP")
-                    .font(.system(size: 9, weight: .semibold))
-                    .tracking(1.5)
-                    .foregroundColor(.white.opacity(0.55))
-                Image(systemName: "chevron.compact.down")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .offset(y: floatDown ? 4 : -2)
-            }
-        }
-        .buttonStyle(.plain)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
-                floatDown = true
-            }
-        }
-    }
-}
 
 // MARK: - Explore Button
 
