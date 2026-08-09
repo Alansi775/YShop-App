@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import GoogleSignIn
 
 // MARK: - Enums
 enum UserRole: String, Codable {
@@ -230,6 +231,19 @@ struct DeliverySignupResponse: Decodable {
 
 struct EmptyResponse: Decodable {}
 
+struct GoogleAuthResponse: Decodable {
+    let success: Bool
+    let token: String?
+    let isNewUser: Bool?
+    let needsProfileCompletion: Bool?
+    let user: SimpleUser?
+    let message: String?
+}
+
+struct GoogleAuthResult {
+    let needsProfileCompletion: Bool
+}
+
 @MainActor
 class AuthManager: NSObject, ObservableObject {
     static let shared = AuthManager()
@@ -429,6 +443,92 @@ class AuthManager: NSObject, ObservableObject {
         }
     }
 
+    /// Sign in (or sign up, transparently) with Google. Unlike the web
+    /// build's own Google Sign-In (which needs Google's own rendered
+    /// button to reliably get an ID token), the native iOS SDK's
+    /// imperative `signIn(withPresenting:)` flow returns one just fine —
+    /// no such platform quirk here.
+    /// Throws `GIDSignInError.canceled` if the user dismisses the picker
+    /// (callers should treat that as "do nothing", not a real error).
+    func signInWithGoogle(presenting: UIViewController) async throws -> GoogleAuthResult {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        let gidResult = try await GIDSignIn.sharedInstance.signIn(withPresenting: presenting)
+        guard let idToken = gidResult.user.idToken?.tokenString else {
+            throw NSError(domain: "GoogleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "Google sign-in did not return an ID token"])
+        }
+
+        let url = URL(string: "\(baseURL)/auth/google")!
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try JSONEncoder().encode(["idToken": idToken])
+
+        let (data, _) = try await session.data(for: urlRequest)
+        let decoded = try JSONDecoder().decode(GoogleAuthResponse.self, from: data)
+
+        guard decoded.success, let token = decoded.token, let user = decoded.user else {
+            throw NSError(domain: "GoogleSignIn", code: -2, userInfo: [NSLocalizedDescriptionKey: decoded.message ?? "Google sign-in failed"])
+        }
+
+        self.token = token
+        self.isLoggedIn = true
+        self.userRole = .customer
+        UserDefaults.standard.set(UserRole.customer.rawValue, forKey: self.roleKey)
+        self.currentUser = user
+        SocketService.shared.connectIfNeeded(token: token)
+        self.refreshPostAuthState(for: .customer)
+
+        return GoogleAuthResult(needsProfileCompletion: decoded.needsProfileCompletion ?? false)
+    }
+
+    /// Submits the required-fields form shown after a first-time Google
+    /// sign-in (see CompleteProfileView) — same PUT /users/profile endpoint
+    /// the rest of the app already uses for profile edits.
+    func completeProfile(
+        displayName: String,
+        surname: String,
+        phone: String,
+        nationalId: String,
+        address: String,
+        latitude: Double?,
+        longitude: Double?,
+        buildingInfo: String,
+        apartmentNumber: String,
+        deliveryInstructions: String
+    ) async throws {
+        guard let token = self.token else {
+            throw NSError(domain: "AuthManager", code: -3, userInfo: [NSLocalizedDescriptionKey: "Not signed in"])
+        }
+        let url = URL(string: "\(baseURL)/users/profile")!
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "PUT"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        var body: [String: Any] = [
+            "displayName": displayName,
+            "surname": surname,
+            "phone": phone,
+            "nationalId": nationalId,
+            "address": address,
+            "buildingInfo": buildingInfo,
+            "apartmentNumber": apartmentNumber,
+            "deliveryInstructions": deliveryInstructions,
+        ]
+        if let latitude { body["latitude"] = latitude }
+        if let longitude { body["longitude"] = longitude }
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (_, response) = try await session.data(for: urlRequest)
+        if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+            throw NSError(domain: "AuthManager", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Failed to save your details"])
+        }
+        await refreshCurrentUser()
+    }
+
     func logout() {
         // Clear all auth state
         isLoggedIn = false
@@ -436,6 +536,7 @@ class AuthManager: NSObject, ObservableObject {
         currentUser = nil
         token = nil  // This deletes from Keychain
         SocketService.shared.disconnect()
+        GIDSignIn.sharedInstance.signOut()
 
         // Clear UserDefaults
         UserDefaults.standard.removeObject(forKey: roleKey)

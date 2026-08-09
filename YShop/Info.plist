@@ -4,6 +4,17 @@
 <dict>
 	<key>API_BASE_HOST</key>
 	<string>https://yshop-imac.tail11c7de.ts.net</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.536109698393-lg69mc0j3hfk5qvtb8nsiqv5oajeitet</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

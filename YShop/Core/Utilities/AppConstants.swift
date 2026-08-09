@@ -64,6 +64,12 @@ struct AppConstants {
     static let appVersion = "1.0.0"
     static let appBuild = "1"
 
+    // MARK: - Google Sign-In
+    // iOS OAuth client, registered under Firebase project home-720ef for
+    // this exact bundle ID (Mohammed-Saleh.YShop). Matching URL scheme
+    // (reversed form of this ID) is registered in Info.plist's CFBundleURLTypes.
+    static let googleSignInClientID = "536109698393-lg69mc0j3hfk5qvtb8nsiqv5oajeitet.apps.googleusercontent.com"
+
     // MARK: - Timeouts
     static let requestTimeout: TimeInterval = 5   // short — so failover is fast
     static let resourceTimeout: TimeInterval = 60

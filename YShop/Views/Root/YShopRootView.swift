@@ -41,27 +41,24 @@ struct YShopRootView: View {
             case .deciding:
                 // Show a lightweight loading view while AuthManager resolves state
                 Group {
-                    if authManager.isLoggedIn, let role = authManager.userRole {
-                        // Navigate to appropriate main area
-                        if role == .customer {
-                            ZStack(alignment: .bottomTrailing) {
-                                NavigationView {
-                                    HomeView()
-                                }
-                                TrackingOrderFloatingButton()
-                                    .padding(.trailing, 18)
-                                    .padding(.bottom, 22)
-                            }
-                        } else {
-                            DeliveryHomeView()
-                        }
-                    } else if !authManager.isLoggedIn {
-                        // Not logged in -> show LoginView
-                        LoginView()
-                            .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                    if authManager.isLoggedIn, let role = authManager.userRole, role != .customer {
+                        // Drivers always need an account — no guest mode for them.
+                        DeliveryHomeView()
                     } else {
-                        // Fallback loading indicator
-                        VStack { ProgressView().scaleEffect(1.2) }
+                        // Customers browse freely whether logged in or not — a
+                        // logged-out visitor lands on the same HomeView as a
+                        // logged-in one. The only place login is actually
+                        // required is checkout / add-to-cart, handled locally
+                        // in those screens (see ProductDetailView).
+                        ZStack(alignment: .bottomTrailing) {
+                            NavigationView {
+                                HomeView()
+                            }
+                            TrackingOrderFloatingButton()
+                                .padding(.trailing, 18)
+                                .padding(.bottom, 22)
+                        }
+                        .transition(.opacity.combined(with: .scale(scale: 1.02)))
                     }
                 }
 

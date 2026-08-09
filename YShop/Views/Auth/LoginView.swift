@@ -4,6 +4,15 @@ struct LoginView: View {
     @State private var viewModel = LoginViewModel()
     @State private var showCustomerSignup = false
     @State private var showDriverSignup = false
+    @State private var showCompleteProfile = false
+    @State private var googleErrorMessage: String?
+    @State private var showGoogleError = false
+    @EnvironmentObject private var authManager: AuthManager
+    // Only meaningful when this view is presented modally (guest add-to-cart
+    // detour, or the profile sheet's "Sign In" CTA) — when it's the app's
+    // root content instead, there's no active presentation to dismiss and
+    // this call is a harmless no-op.
+    @Environment(\.dismiss) private var dismiss
     
     // YSHOP Brand Blue
     private var accentBlue: Color {
@@ -98,19 +107,25 @@ struct LoginView: View {
                         Rectangle()
                             .fill(Color(.separator).opacity(0.5))
                             .frame(height: 0.5)
-                        
+
                         Text("OR")
                             .font(.system(size: 11, weight: .semibold))
                             .tracking(1.5)
                             .foregroundColor(Color(.tertiaryLabel))
-                        
+
                         Rectangle()
                             .fill(Color(.separator).opacity(0.5))
                             .frame(height: 0.5)
                     }
                     .padding(.horizontal, 20)
+                    .padding(.bottom, 16)
+
+                    GoogleSignInButton(isLoading: viewModel.isLoading) {
+                        Task { await handleGoogleSignIn() }
+                    }
+                    .padding(.horizontal, 20)
                     .padding(.bottom, 28)
-                    
+
                     // Signup Options
                     VStack(spacing: 10) {
                         SignupOptionCard(
@@ -165,6 +180,105 @@ struct LoginView: View {
         }
         .sheet(isPresented: $showDriverSignup) {
             DeliverySignupView()
+        }
+        .fullScreenCover(isPresented: $showCompleteProfile, onDismiss: {
+            // completeProfile() itself dismisses this cover on success; if the
+            // user got here at all Google auth already succeeded, so either
+            // way there's a valid session now — close the login screen too.
+            dismiss()
+        }) {
+            CompleteProfileView()
+        }
+        .alert("Google Sign-In Failed", isPresented: $showGoogleError) {
+            Button("OK") { showGoogleError = false }
+        } message: {
+            Text(googleErrorMessage ?? "Something went wrong.")
+        }
+        .onChange(of: authManager.isLoggedIn) { _, isLoggedIn in
+            if isLoggedIn && !showCompleteProfile { dismiss() }
+        }
+    }
+
+    private func handleGoogleSignIn() async {
+        guard let rootVC = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?.windows.first(where: { $0.isKeyWindow })?.rootViewController
+        else { return }
+
+        do {
+            let result = try await authManager.signInWithGoogle(presenting: rootVC)
+            if result.needsProfileCompletion {
+                showCompleteProfile = true
+            }
+            // Otherwise: authManager.isLoggedIn is now true, the onChange
+            // above dismisses this screen.
+        } catch {
+            let nsError = error as NSError
+            // GIDSignInError.canceled — user closed the picker, not a real error.
+            if nsError.domain == "com.google.GIDSignIn" && nsError.code == -5 { return }
+            googleErrorMessage = error.localizedDescription
+            showGoogleError = true
+        }
+    }
+}
+
+// MARK: - Google Sign-In Button
+
+private struct GoogleSignInButton: View {
+    let isLoading: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                if isLoading {
+                    ProgressView().tint(Color(.label))
+                } else {
+                    GoogleLogoMark()
+                        .frame(width: 18, height: 18)
+                    Text("Continue with Google")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Color(.label))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(Color(.systemBackground))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color(.separator).opacity(0.6), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .disabled(isLoading)
+        .buttonStyle(.plain)
+    }
+}
+
+private struct GoogleLogoMark: View {
+    var body: some View {
+        Canvas { context, size in
+            let rect = CGRect(origin: .zero, size: size)
+            let lineWidth = size.width * 0.22
+            let radius = (size.width - lineWidth) / 2
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+
+            func arc(_ color: Color, _ startDeg: Double, _ sweepDeg: Double) {
+                var path = Path()
+                path.addArc(center: center, radius: radius,
+                            startAngle: .degrees(startDeg), endAngle: .degrees(startDeg + sweepDeg),
+                            clockwise: false)
+                context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+            }
+
+            arc(Color(red: 0.259, green: 0.522, blue: 0.957), -45, 95)   // blue
+            arc(Color(red: 0.204, green: 0.659, blue: 0.325), 55, 80)    // green
+            arc(Color(red: 0.984, green: 0.737, blue: 0.020), 135, 80)   // yellow
+            arc(Color(red: 0.918, green: 0.263, blue: 0.208), 215, 90)   // red
+
+            var bar = Path()
+            bar.addRect(CGRect(x: center.x, y: center.y - lineWidth * 0.28, width: radius * 0.95, height: lineWidth * 0.56))
+            context.fill(bar, with: .color(Color(red: 0.259, green: 0.522, blue: 0.957)))
         }
     }
 }

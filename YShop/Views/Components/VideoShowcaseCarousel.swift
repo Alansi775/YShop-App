@@ -1,0 +1,202 @@
+// VideoShowcaseCarousel.swift
+//
+// Cover-flow style video carousel — matches the design ported into the
+// Flutter/web app: wide 16:9 cards, adjacent cards peeking in on both
+// sides (scaled down + dimmed), arrow buttons floating over the peek
+// area, bottom-center text overlay (small uppercase kicker, bold title,
+// "Learn More" / "Shop Now" links) over a gradient scrim, and pill-style
+// pagination dots below the carousel. Only the centered card actually
+// plays; the rest sit paused. Placeholder footage (Resources/Videos/) —
+// swap for real product videos whenever they're ready, same view either way.
+import SwiftUI
+import AVFoundation
+
+struct VideoShowcaseItem: Identifiable {
+    let id = UUID()
+    let filename: String
+    let ext: String
+    let title: String
+    let subtitle: String
+
+    init(filename: String, ext: String = "mp4", title: String, subtitle: String) {
+        self.filename = filename
+        self.ext = ext
+        self.title = title
+        self.subtitle = subtitle
+    }
+}
+
+struct VideoShowcaseCarousel: View {
+    private let items: [VideoShowcaseItem] = [
+        VideoShowcaseItem(filename: "hero1", title: "Featured Selection", subtitle: "Handpicked for You"),
+        VideoShowcaseItem(filename: "hero2", title: "New Arrivals", subtitle: "Fresh on YShop"),
+        VideoShowcaseItem(filename: "hero3", title: "Best Sellers", subtitle: "Loved by Customers"),
+    ]
+
+    @State private var currentIndex = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let cardWidth = geo.size.width * 0.78
+            let cardHeight = cardWidth * 9 / 16
+            let spacing: CGFloat = 12
+
+            VStack(spacing: 14) {
+                ZStack {
+                    HStack(spacing: spacing) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { i, item in
+                            let delta = abs(Double(i - currentIndex))
+                            VideoShowcaseCard(item: item, isActive: i == currentIndex)
+                                .frame(width: cardWidth, height: cardHeight)
+                                .scaleEffect(1 - min(delta, 1) * 0.14)
+                                .opacity(1 - min(delta, 1) * 0.65)
+                        }
+                    }
+                    .frame(width: geo.size.width, alignment: .center)
+                    .offset(x: -CGFloat(currentIndex) * (cardWidth + spacing))
+                    .animation(.easeOut(duration: 0.45), value: currentIndex)
+
+                    HStack {
+                        CarouselArrowButton(systemName: "chevron.left") { go(-1) }
+                        Spacer()
+                        CarouselArrowButton(systemName: "chevron.right") { go(1) }
+                    }
+                }
+                .frame(width: geo.size.width, height: cardHeight)
+                .clipped()
+
+                HStack(spacing: 6) {
+                    ForEach(items.indices, id: \.self) { i in
+                        Capsule()
+                            .fill(Color.primary.opacity(i == currentIndex ? 0.85 : 0.22))
+                            .frame(width: i == currentIndex ? 20 : 6, height: 6)
+                            .animation(.easeOut(duration: 0.25), value: currentIndex)
+                    }
+                }
+            }
+            .frame(width: geo.size.width, height: cardHeight + 24)
+        }
+    }
+
+    private func go(_ delta: Int) {
+        let count = items.count
+        currentIndex = ((currentIndex + delta) % count + count) % count
+    }
+}
+
+private struct CarouselArrowButton: View {
+    let systemName: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                .background(Circle().fill(Color.black.opacity(0.2)))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
+    }
+}
+
+private struct VideoShowcaseCard: View {
+    let item: VideoShowcaseItem
+    let isActive: Bool
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if let url = Bundle.main.url(forResource: item.filename, withExtension: item.ext) {
+                LoopingVideoPlayerView(url: url, isActive: isActive)
+            }
+            if !isActive {
+                Color.black.opacity(0.5)
+            }
+            LinearGradient(colors: [.black.opacity(0.75), .clear], startPoint: .bottom, endPoint: .top)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .frame(height: 130)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+
+            VStack(spacing: 6) {
+                Text(item.subtitle.uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(2)
+                    .foregroundColor(.white.opacity(0.75))
+                Text(item.title)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+                HStack(spacing: 20) {
+                    videoLink("Learn More")
+                    videoLink("Shop Now")
+                }
+                .padding(.top, 4)
+            }
+            .padding(20)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .opacity(isActive ? 1 : 0)
+            .animation(.easeInOut(duration: 0.25), value: isActive)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    private func videoLink(_ text: String) -> some View {
+        HStack(spacing: 3) {
+            Text(text).font(.system(size: 13, weight: .semibold))
+            Image(systemName: "arrow.right").font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundColor(.white)
+    }
+}
+
+// MARK: - Silent, looping video playback
+
+private final class LoopingPlayerUIView: UIView {
+    private let playerLayer = AVPlayerLayer()
+    private var queuePlayer: AVQueuePlayer?
+    private var looper: AVPlayerLooper?
+
+    func configure(url: URL) {
+        let item = AVPlayerItem(url: url)
+        let player = AVQueuePlayer()
+        player.isMuted = true
+        looper = AVPlayerLooper(player: player, templateItem: item)
+        playerLayer.player = player
+        playerLayer.videoGravity = .resizeAspectFill
+        queuePlayer = player
+    }
+
+    func play() { queuePlayer?.play() }
+    func pause() { queuePlayer?.pause() }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        layer.addSublayer(playerLayer)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        playerLayer.frame = bounds
+    }
+}
+
+private struct LoopingVideoPlayerView: UIViewRepresentable {
+    let url: URL
+    let isActive: Bool
+
+    func makeUIView(context: Context) -> LoopingPlayerUIView {
+        let view = LoopingPlayerUIView()
+        view.configure(url: url)
+        if isActive { view.play() }
+        return view
+    }
+
+    func updateUIView(_ uiView: LoopingPlayerUIView, context: Context) {
+        isActive ? uiView.play() : uiView.pause()
+    }
+}

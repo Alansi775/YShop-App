@@ -78,11 +78,12 @@ struct ProfileSheetView: View {
     @EnvironmentObject var authManager: AuthManager
     @Binding var isPresented: Bool
     let onMyOrders: () -> Void
-    
+
     @Environment(\.colorScheme) var colorScheme
     @State private var glowScale: CGFloat = 0.98
     @State private var glowOpacity: Double = 0.2
-    
+    @State private var showLoginScreen = false
+
     var body: some View {
         ZStack {
             // استخدام مواد النظام الشفافة (System Materials) ليتفاعل الـ Blur مع الخلفية وراء الـ Sheet
@@ -94,14 +95,17 @@ struct ProfileSheetView: View {
                 Color(uiColor: .secondarySystemBackground)
                     .ignoresSafeArea()
             }
-            
+
+            if !authManager.isLoggedIn {
+                guestContent
+            } else {
             VStack(spacing: 0) {
                 // مقبض الـ Sheet الرسمي النحيف
                 RoundedRectangle(cornerRadius: 2.5)
                     .fill(Color(.placeholderText).opacity(0.5))
                     .frame(width: 36, height: 5)
                     .padding(.top, 10)
-                
+
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 24) {
                         
@@ -204,10 +208,64 @@ struct ProfileSheetView: View {
                     .padding(.bottom, 30)
                 }
             }
+            }
         }
         .presentationDetents([.medium, .large])
+        .fullScreenCover(isPresented: $showLoginScreen) {
+            LoginView()
+        }
     }
-    
+
+    private var guestContent: some View {
+        VStack(spacing: 20) {
+            RoundedRectangle(cornerRadius: 2.5)
+                .fill(Color(.placeholderText).opacity(0.5))
+                .frame(width: 36, height: 5)
+                .padding(.top, 10)
+
+            Spacer()
+
+            Circle()
+                .fill(.ultraThickMaterial)
+                .frame(width: 76, height: 76)
+                .overlay(
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.secondary)
+                )
+
+            VStack(spacing: 6) {
+                Text("You're browsing as a guest")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text("Sign in to check out and track your orders")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button(action: {
+                isPresented = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showLoginScreen = true
+                }
+            }) {
+                Text("Sign In / Create Account")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(colorScheme == .dark ? .black : .white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(Color.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 8)
+
+            Spacer()
+            Spacer()
+        }
+    }
+
     // خط فاصل نحيف يختفي خلف الأيقونة ويبدأ مع بداية النص لحبك الهندسة البصرية
     private var customDivider: some View {
         Divider()

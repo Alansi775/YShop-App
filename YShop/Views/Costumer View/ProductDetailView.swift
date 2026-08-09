@@ -5,11 +5,12 @@ import Kingfisher
 struct ProductDetailView: View {
     @Environment(\.colorScheme) var colorScheme
     @EnvironmentObject var cartManager: CartManager
+    @EnvironmentObject var authManager: AuthManager
     @Environment(\.dismiss) private var dismiss
-    
+
     let product: Product
     let store: Store
-    
+
     @State private var showFullScreenImage: Bool = false
     @State private var selectedImageIndex: Int = 0
     @State private var quantity: Int = 1
@@ -17,6 +18,10 @@ struct ProductDetailView: View {
     @State private var showAddedToCart: Bool = false
     @State private var showCartSheet: Bool = false
     @State private var shakeQty: Bool = false
+    // Guest add-to-cart: quantity picked before the login detour survives
+    // the round trip (it's just this same State field), so the item gets
+    // added with the original quantity the moment sign-in succeeds.
+    @State private var showLoginSheet: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -74,8 +79,39 @@ struct ProductDetailView: View {
         .sheet(isPresented: $showCartSheet) {
             CartView(showsCloseButton: true)
         }
+        .fullScreenCover(isPresented: $showLoginSheet, onDismiss: {
+            // If the user actually signed in while this sheet was up, resume
+            // the add-to-cart with the same quantity and land them in the
+            // cart. A plain dismiss without signing in does nothing further.
+            if authManager.isLoggedIn {
+                Task {
+                    await performAddToCart()
+                    showCartSheet = true
+                }
+            }
+        }) {
+            LoginView()
+        }
     }
-    
+
+    // MARK: - Add to Cart
+
+    private func performAddToCart() async {
+        do {
+            try await cartManager.addToCart(product: product, quantity: quantity)
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                showAddedToCart = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    showAddedToCart = false
+                }
+            }
+        } catch {
+            print("❌ [CART] Failed to add item: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Subviews
     
     private var headerView: some View {
@@ -377,21 +413,11 @@ struct ProductDetailView: View {
             
             // Add to Cart Button
             Button(action: {
-                Task {
-                    do {
-                        try await cartManager.addToCart(product: product, quantity: quantity)
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                            showAddedToCart = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                showAddedToCart = false
-                            }
-                        }
-                    } catch {
-                        print("❌ [CART] Failed to add item: \(error.localizedDescription)")
-                    }
+                guard authManager.isLoggedIn else {
+                    showLoginSheet = true
+                    return
                 }
+                Task { await performAddToCart() }
             }) {
                 HStack(spacing: 8) {
                     Image(systemName: showAddedToCart ? "checkmark.circle.fill" : "bag.fill")

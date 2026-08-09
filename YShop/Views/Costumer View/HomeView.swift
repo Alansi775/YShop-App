@@ -186,7 +186,7 @@ struct HomeView: View {
                 if let uiImage = UIImage(named: hero.imagePath) {
                     Image(uiImage: uiImage)
                         .resizable().scaledToFit()
-                        .frame(height: UIScreen.main.bounds.height * 0.25)
+                        .frame(height: UIScreen.main.bounds.height * 0.16)
                 } else {
                     VStack(spacing: 12) {
                         Image(systemName: "photo.fill")
@@ -196,8 +196,13 @@ struct HomeView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(Color(.secondaryLabel))
                     }
-                    .frame(height: UIScreen.main.bounds.height * 0.25)
+                    .frame(height: UIScreen.main.bounds.height * 0.16)
                 }
+
+                Spacer()
+
+                VideoShowcaseCarousel()
+                    .frame(height: UIScreen.main.bounds.width * 0.78 * 9 / 16 + 24)
 
                 Spacer()
 

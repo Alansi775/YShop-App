@@ -8,6 +8,7 @@
 import SwiftUI
 import AppIntents
 import UserNotifications
+import GoogleSignIn
 
 @main
 struct YShopApp: App {
@@ -21,6 +22,7 @@ struct YShopApp: App {
         UIFont.registerCustomFonts()
         YShopShortcutsProvider.updateAppShortcutParameters()
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: AppConstants.googleSignInClientID)
     }
 
     var body: some Scene {
@@ -64,6 +66,7 @@ struct YShopApp: App {
             .environmentObject(cartManager)
             .environmentObject(locationManager)
             .onOpenURL { url in
+                if GIDSignIn.sharedInstance.handle(url) { return }
                 guard url.scheme == "yshop" else { return }
                 let orderId = url.lastPathComponent
                 switch url.host {

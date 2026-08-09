@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D00835EBC052DF4070E74690 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 891C19F35EA34DF818B7DCF7 /* GoogleSignIn */; };
 		DE2DE2492FCBBB3F000004DA /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = DE2DE2482FCBBB3F000004DA /* Kingfisher */; };
 		DED1B3DB2FE6FC5500D7CD3C /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = DED1B3DA2FE6FC5500D7CD3C /* Secrets.xcconfig */; };
 		DED1B4C02FE844CC00D7CD3C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DED1B4BF2FE844CC00D7CD3C /* WidgetKit.framework */; };
@@ -121,6 +122,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D00835EBC052DF4070E74690 /* GoogleSignIn in Frameworks */,
 				DE2DE2492FCBBB3F000004DA /* Kingfisher in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -207,6 +209,7 @@
 			name = YShop;
 			packageProductDependencies = (
 				DE2DE2482FCBBB3F000004DA /* Kingfisher */,
+				891C19F35EA34DF818B7DCF7 /* GoogleSignIn */,
 			);
 			productName = YShop;
 			productReference = B3110AD52D1DA1B200619E9A /* YShop.app */;
@@ -313,6 +316,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				DE2DE2472FCBBB3F000004DA /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				1DB1F706C604A67C2F7A45DD /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B3110AD62D1DA1B200619E9A /* Products */;
@@ -775,6 +779,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		1DB1F706C604A67C2F7A45DD /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.1.0;
+			};
+		};
 		DE2DE2472FCBBB3F000004DA /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
@@ -786,6 +798,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		891C19F35EA34DF818B7DCF7 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1DB1F706C604A67C2F7A45DD /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
 		DE2DE2482FCBBB3F000004DA /* Kingfisher */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DE2DE2472FCBBB3F000004DA /* XCRemoteSwiftPackageReference "Kingfisher" */;
