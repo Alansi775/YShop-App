@@ -45,6 +45,8 @@ struct HomeView: View {
     // working category swipe already uses) gets through fine, so this
     // drives the reveal by hand instead of fighting the native ScrollView.
     @State private var heroScrollOffset: CGFloat = 0
+    @State private var heroDragStartOffset: CGFloat = 0
+    @State private var isDraggingHeroVertically = false
 
     let heroProducts = [
         HeroProduct(name: "PREMIUM FOOD",  subtitle: "Gourmet Excellence",  imagePath: "9",    gradient: [Color(red: 0.16, green: 0.09, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)], category: "Food",     icon: "fork.knife"),
@@ -300,35 +302,41 @@ struct HomeView: View {
                 .frame(height: outerGeo.size.height, alignment: .top)
                 .clipped()
                 .contentShape(Rectangle())
-                // Swipe-to-reveal, snap-based — deliberately matching the
-                // EXACT gesture pattern the horizontal category swipe above
-                // already uses and is confirmed working (simultaneousGesture
-                // + onEnded only, threshold-based). An earlier version used
-                // DragGesture's `.updating()` + `@GestureState` for a live
-                // finger-follow effect, and that combination silently never
-                // fired in this nested-TabView layout even though the
-                // onEnded-only pattern does — so this trades live tracking
-                // for reliability. Swipe up reveals the videos, swipe down
-                // collapses back to the hero.
-                .simultaneousGesture(DragGesture().onEnded { value in
-                    let h = value.translation.width
-                    let v = value.translation.height
-                    guard abs(v) > abs(h) else { return }
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                        if v < -40 {
-                            heroScrollOffset = -videoSectionHeight
-                        } else if v > 40 {
-                            heroScrollOffset = 0
+                // True free-following scroll — the content tracks the
+                // finger 1:1 (clamped), stopping wherever released, like a
+                // normal ScrollView with no momentum. Deliberately NOT using
+                // DragGesture's `.updating()` + `@GestureState`: that
+                // combination silently never fired in this nested-TabView
+                // layout. Plain `.onChanged`/`.onEnded` mutating ordinary
+                // `@State` directly is a simpler, more primitive delivery
+                // path, so it's the next thing to try — if THIS also
+                // doesn't track live, the nested TabView is dropping ALL
+                // continuous drag updates, not just the GestureState ones,
+                // and this needs a structural fix instead.
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { value in
+                            let h = value.translation.width
+                            let v = value.translation.height
+                            if !isDraggingHeroVertically {
+                                guard abs(v) > abs(h) else { return }
+                                isDraggingHeroVertically = true
+                                heroDragStartOffset = heroScrollOffset
+                            }
+                            let proposed = heroDragStartOffset + v
+                            heroScrollOffset = min(0, max(-videoSectionHeight, proposed))
+                            handleHeroScrollOffset(heroScrollOffset)
                         }
-                    }
-                    handleHeroScrollOffset(heroScrollOffset)
-                })
+                        .onEnded { _ in
+                            isDraggingHeroVertically = false
+                        }
+                )
             }
         }
     }
 
     private var videoSectionHeight: CGFloat {
-        let carouselHeight = UIScreen.main.bounds.width * VideoShowcaseCarousel.widthFraction * 9 / 16 + 24
+        let carouselHeight = UIScreen.main.bounds.width * VideoShowcaseCarousel.widthFraction * 0.66 + 24
         // Header text block + VStack spacing + top/bottom padding from
         // videoSection below — a slightly generous estimate is fine, worst
         // case a little empty space at the very bottom of the drag range.
@@ -349,7 +357,7 @@ struct HomeView: View {
             .padding(.horizontal, 20)
 
             VideoShowcaseCarousel()
-                .frame(height: UIScreen.main.bounds.width * VideoShowcaseCarousel.widthFraction * 9 / 16 + 24)
+                .frame(height: UIScreen.main.bounds.width * VideoShowcaseCarousel.widthFraction * 0.66 + 24)
         }
         .padding(.top, 12)
         .padding(.bottom, 48)

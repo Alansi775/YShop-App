@@ -41,35 +41,47 @@ struct VideoShowcaseCarousel: View {
         VideoShowcaseItem(filename: "hero3", title: "Best Sellers", subtitle: "Loved by Customers"),
     ]
 
-    @State private var currentIndex = 0
+    // A freely-incrementing "virtual" index rather than one wrapped to
+    // 0..<items.count on every swipe. The old version wrapped currentIndex
+    // itself (e.g. 2 -> 0 going forward past the last card), and since the
+    // offset animation is driven by that wrapped value, animating from 2 to
+    // 0 slid all the way back LEFT through card 1 — visually indistinguishable
+    // from "going backwards". Only the real index (virtualIndex mod count)
+    // is used to pick which video plays; the position math always moves by
+    // exactly ±1 per swipe, in the swiped direction, forever — the same
+    // trick Flutter's PageView.builder(itemCount: huge) uses for infinite
+    // looping.
+    @State private var virtualIndex = 0
+
+    private func wrapped(_ v: Int) -> Int {
+        let n = items.count
+        return ((v % n) + n) % n
+    }
 
     var body: some View {
         GeometryReader { geo in
             let cardWidth = geo.size.width * Self.widthFraction
-            let cardHeight = cardWidth * 9 / 16
+            // Slightly taller than strict 16:9 — at 16:9 the bottom text
+            // overlay ate a large fraction of the card's height, making the
+            // video itself feel cramped top-to-bottom even though the width
+            // was right. Width is unchanged.
+            let cardHeight = cardWidth * 0.66
             let spacing: CGFloat = 12
-            // The HStack lays out all cards and is naturally centered on
-            // its OWN middle item (index (count-1)/2), not on `currentIndex`.
-            // Shifting by just `-currentIndex * step` only cancels that out
-            // when currentIndex happens to equal the middle — otherwise the
-            // "active" card ends up sitting off to one side instead of
-            // centered. This offset re-centers whichever card is actually
-            // current, for any index.
-            let middleIndex = Double(items.count - 1) / 2.0
+            let step = cardWidth + spacing
+            let windowRadius = 1 // prev/current/next only — matches the old fixed-3-card render cost
 
             VStack(spacing: 14) {
-                HStack(spacing: spacing) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-                        let delta = abs(Double(i - currentIndex))
-                        VideoShowcaseCard(item: item, isActive: i == currentIndex)
+                ZStack {
+                    ForEach((virtualIndex - windowRadius)...(virtualIndex + windowRadius), id: \.self) { virtual in
+                        let item = items[wrapped(virtual)]
+                        let delta = Double(virtual - virtualIndex)
+                        VideoShowcaseCard(item: item, isActive: virtual == virtualIndex)
                             .frame(width: cardWidth, height: cardHeight)
-                            .scaleEffect(1 - min(delta, 1) * 0.14)
-                            .opacity(1 - min(delta, 1) * 0.65)
+                            .scaleEffect(1 - min(abs(delta), 1) * 0.14)
+                            .opacity(1 - min(abs(delta), 1) * 0.65)
+                            .offset(x: CGFloat(delta) * step)
                     }
                 }
-                .frame(width: geo.size.width, alignment: .center)
-                .offset(x: CGFloat(middleIndex - Double(currentIndex)) * (cardWidth + spacing))
-                .animation(.easeOut(duration: 0.45), value: currentIndex)
                 .frame(width: geo.size.width, height: cardHeight)
                 .clipped()
                 .contentShape(Rectangle())
@@ -77,33 +89,30 @@ struct VideoShowcaseCarousel: View {
                 // (HomeView) attaches its own category-swipe gesture only
                 // to the hero block above, never to this view, so the two
                 // never fight over the same drag. simultaneousGesture keeps
-                // this from blocking the page's vertical ScrollView too.
+                // this from blocking the page's own drag-to-reveal gesture.
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 20)
                         .onEnded { value in
                             let h = value.translation.width
                             let v = value.translation.height
                             guard abs(h) > abs(v), abs(h) > 40 else { return }
-                            go(h < 0 ? 1 : -1)
+                            withAnimation(.easeOut(duration: 0.45)) {
+                                virtualIndex += (h < 0 ? 1 : -1)
+                            }
                         }
                 )
 
                 HStack(spacing: 6) {
                     ForEach(items.indices, id: \.self) { i in
                         Capsule()
-                            .fill(Color.primary.opacity(i == currentIndex ? 0.85 : 0.22))
-                            .frame(width: i == currentIndex ? 20 : 6, height: 6)
-                            .animation(.easeOut(duration: 0.25), value: currentIndex)
+                            .fill(Color.primary.opacity(i == wrapped(virtualIndex) ? 0.85 : 0.22))
+                            .frame(width: i == wrapped(virtualIndex) ? 20 : 6, height: 6)
+                            .animation(.easeOut(duration: 0.25), value: virtualIndex)
                     }
                 }
             }
             .frame(width: geo.size.width, height: cardHeight + 24)
         }
-    }
-
-    private func go(_ delta: Int) {
-        let count = items.count
-        currentIndex = ((currentIndex + delta) % count + count) % count
     }
 }
 
@@ -122,24 +131,25 @@ private struct VideoShowcaseCard: View {
             }
             LinearGradient(colors: [.black.opacity(0.75), .clear], startPoint: .bottom, endPoint: .top)
                 .frame(maxHeight: .infinity, alignment: .bottom)
-                .frame(height: 130)
+                .frame(height: 92)
                 .frame(maxHeight: .infinity, alignment: .bottom)
 
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Text(item.subtitle.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(2)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .tracking(1.5)
                     .foregroundColor(.white.opacity(0.75))
                 Text(item.title)
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.system(size: 19, weight: .bold))
                     .foregroundColor(.white)
-                HStack(spacing: 20) {
+                HStack(spacing: 16) {
                     videoLink("Learn More")
                     videoLink("Shop Now")
                 }
-                .padding(.top, 4)
+                .padding(.top, 2)
             }
-            .padding(20)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
             .frame(maxHeight: .infinity, alignment: .bottom)
             .opacity(isActive ? 1 : 0)
             .animation(.easeInOut(duration: 0.25), value: isActive)
@@ -149,8 +159,8 @@ private struct VideoShowcaseCard: View {
 
     private func videoLink(_ text: String) -> some View {
         HStack(spacing: 3) {
-            Text(text).font(.system(size: 13, weight: .semibold))
-            Image(systemName: "arrow.right").font(.system(size: 11, weight: .semibold))
+            Text(text).font(.system(size: 11.5, weight: .semibold))
+            Image(systemName: "arrow.right").font(.system(size: 10, weight: .semibold))
         }
         .foregroundColor(.white)
     }
