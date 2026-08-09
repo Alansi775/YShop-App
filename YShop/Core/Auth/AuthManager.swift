@@ -231,6 +231,13 @@ struct DeliverySignupResponse: Decodable {
 
 struct EmptyResponse: Decodable {}
 
+struct GoogleProfileInfo: Decodable {
+    let email: String
+    let givenName: String?
+    let familyName: String?
+    let name: String?
+}
+
 struct GoogleAuthResponse: Decodable {
     let success: Bool
     let token: String?
@@ -238,6 +245,9 @@ struct GoogleAuthResponse: Decodable {
     let needsProfileCompletion: Bool?
     let user: SimpleUser?
     let message: String?
+    // Present only when isNewUser == true — no account/session exists yet.
+    let pendingSignupToken: String?
+    let googleProfile: GoogleProfileInfo?
 }
 
 struct GoogleAuthResult {
@@ -254,6 +264,14 @@ class AuthManager: NSObject, ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 @Published var heading: Double? = nil
+    // Set only while a NEW Google user is mid-signup: the pending token
+    // plus whatever name Google actually gave us, held between
+    // signInWithGoogle and the required-fields form being submitted
+    // (completeGoogleSignup). In-memory only — if the user backs out of
+    // CompleteProfileView, this is just discarded and nothing was ever
+    // written to the database.
+    @Published var pendingGoogleProfile: GoogleProfileInfo?
+    private var pendingGoogleSignupToken: String?
 
     private let keychainHelper = KeychainHelper.shared
     private let session: URLSession
@@ -469,7 +487,19 @@ class AuthManager: NSObject, ObservableObject {
         let (data, _) = try await session.data(for: urlRequest)
         let decoded = try JSONDecoder().decode(GoogleAuthResponse.self, from: data)
 
-        guard decoded.success, let token = decoded.token, let user = decoded.user else {
+        guard decoded.success else {
+            throw NSError(domain: "GoogleSignIn", code: -2, userInfo: [NSLocalizedDescriptionKey: decoded.message ?? "Google sign-in failed"])
+        }
+
+        if decoded.isNewUser == true {
+            // No account exists yet — nothing to save. Just remember the
+            // pending token + Google's name fields for CompleteProfileView.
+            pendingGoogleSignupToken = decoded.pendingSignupToken
+            pendingGoogleProfile = decoded.googleProfile
+            return GoogleAuthResult(needsProfileCompletion: true)
+        }
+
+        guard let token = decoded.token, let user = decoded.user else {
             throw NSError(domain: "GoogleSignIn", code: -2, userInfo: [NSLocalizedDescriptionKey: decoded.message ?? "Google sign-in failed"])
         }
 
@@ -482,6 +512,66 @@ class AuthManager: NSObject, ObservableObject {
         self.refreshPostAuthState(for: .customer)
 
         return GoogleAuthResult(needsProfileCompletion: decoded.needsProfileCompletion ?? false)
+    }
+
+    /// Submits the required-fields form for a first-time Google sign-up
+    /// (see CompleteProfileView) — creates the account and a real session
+    /// together in one call, using the pending token from signInWithGoogle.
+    /// [firstName]/[surname] are only used as a fallback for whatever
+    /// Google itself didn't provide — the backend ignores them if Google
+    /// already gave us that field, since it can't be overridden client-side.
+    func completeGoogleSignup(
+        phone: String,
+        nationalId: String,
+        address: String,
+        latitude: Double?,
+        longitude: Double?,
+        buildingInfo: String,
+        apartmentNumber: String,
+        deliveryInstructions: String,
+        firstName: String,
+        surname: String
+    ) async throws {
+        guard let pendingToken = pendingGoogleSignupToken else {
+            throw NSError(domain: "AuthManager", code: -4, userInfo: [NSLocalizedDescriptionKey: "No pending Google sign-in — please sign in with Google again"])
+        }
+
+        let url = URL(string: "\(baseURL)/auth/google/complete-signup")!
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var body: [String: Any] = [
+            "pendingSignupToken": pendingToken,
+            "phone": phone,
+            "nationalId": nationalId,
+            "address": address,
+            "buildingInfo": buildingInfo,
+            "apartmentNumber": apartmentNumber,
+            "deliveryInstructions": deliveryInstructions,
+            "firstName": firstName,
+            "surname": surname,
+        ]
+        if let latitude { body["latitude"] = latitude }
+        if let longitude { body["longitude"] = longitude }
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, _) = try await session.data(for: urlRequest)
+        let decoded = try JSONDecoder().decode(GoogleAuthResponse.self, from: data)
+
+        guard decoded.success, let token = decoded.token, let user = decoded.user else {
+            throw NSError(domain: "AuthManager", code: -5, userInfo: [NSLocalizedDescriptionKey: decoded.message ?? "Failed to complete sign-up"])
+        }
+
+        self.token = token
+        self.isLoggedIn = true
+        self.userRole = .customer
+        UserDefaults.standard.set(UserRole.customer.rawValue, forKey: self.roleKey)
+        self.currentUser = user
+        pendingGoogleSignupToken = nil
+        pendingGoogleProfile = nil
+        SocketService.shared.connectIfNeeded(token: token)
+        self.refreshPostAuthState(for: .customer)
     }
 
     /// Submits the required-fields form shown after a first-time Google
@@ -535,6 +625,8 @@ class AuthManager: NSObject, ObservableObject {
         userRole = nil
         currentUser = nil
         token = nil  // This deletes from Keychain
+        pendingGoogleSignupToken = nil
+        pendingGoogleProfile = nil
         SocketService.shared.disconnect()
         GIDSignIn.sharedInstance.signOut()
 

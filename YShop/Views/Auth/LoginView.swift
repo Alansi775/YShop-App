@@ -224,15 +224,23 @@ struct LoginView: View {
 
 // MARK: - Google Sign-In Button
 
+// Same visual language as PrimaryButton/SecondaryButton (54pt tall, 14pt
+// radius, tertiarySystemBackground fill, press-scale + haptic) so this
+// reads as a native sibling of "Enter Boutique"/"Login as Driver" instead
+// of an unstyled outlier bolted on underneath them.
 private struct GoogleSignInButton: View {
     let isLoading: Bool
     let action: () -> Void
+    @State private var isPressed = false
 
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            HapticManager.shared.impact(style: .light)
+            action()
+        }) {
             HStack(spacing: 10) {
                 if isLoading {
-                    ProgressView().tint(Color(.label))
+                    ProgressView().tint(Color(.secondaryLabel))
                 } else {
                     GoogleLogoMark()
                         .frame(width: 18, height: 18)
@@ -242,16 +250,24 @@ private struct GoogleSignInButton: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .background(Color(.systemBackground))
+            .frame(height: 54)
+            .background(Color(.tertiarySystemBackground))
+            .cornerRadius(14)
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color(.separator).opacity(0.6), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color(.tertiaryLabel), lineWidth: 1.5)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .disabled(isLoading)
         .buttonStyle(.plain)
+        .scaleEffect(isPressed ? 0.96 : 1.0)
+        .opacity(isLoading ? 0.7 : 1.0)
+        .onLongPressGesture(minimumDuration: 0.01, perform: {}, onPressingChanged: { isPressing in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isPressed = isPressing
+                if isPressing { HapticManager.shared.impact(style: .light) }
+            }
+        })
     }
 }
 

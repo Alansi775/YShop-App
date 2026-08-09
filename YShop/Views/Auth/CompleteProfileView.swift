@@ -27,6 +27,15 @@ struct CompleteProfileView: View {
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
+    // True when completing a first-time Google sign-up (no account/session
+    // exists yet — submit() calls authManager.completeGoogleSignup, which
+    // creates the account). False for an already-authenticated account
+    // that's just missing required fields (submit() uses the normal
+    // PUT /users/profile path via authManager.completeProfile).
+    private var isPendingGoogleSignup: Bool { authManager.pendingGoogleProfile != nil }
+    private var nameLocked: Bool { !(authManager.pendingGoogleProfile?.givenName ?? "").isEmpty }
+    private var surnameLocked: Bool { !(authManager.pendingGoogleProfile?.familyName ?? "").isEmpty }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -40,8 +49,23 @@ struct CompleteProfileView: View {
                     }
                     .padding(.top, 12)
 
-                    YShopTextField(placeholder: "First Name", icon: "person.fill", text: $firstName)
-                    YShopTextField(placeholder: "Surname", icon: "person.fill", text: $surname)
+                    if isPendingGoogleSignup {
+                        HStack(spacing: 6) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                            Text("Signing up as \(authManager.pendingGoogleProfile?.email ?? "")")
+                                .font(.system(size: 13))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    YShopTextField(placeholder: nameLocked ? "First Name (from Google)" : "First Name", icon: nameLocked ? "lock.fill" : "person.fill", text: $firstName)
+                        .disabled(nameLocked)
+                        .opacity(nameLocked ? 0.65 : 1.0)
+                    YShopTextField(placeholder: surnameLocked ? "Surname (from Google)" : "Surname", icon: surnameLocked ? "lock.fill" : "person.fill", text: $surname)
+                        .disabled(surnameLocked)
+                        .opacity(surnameLocked ? 0.65 : 1.0)
                     YShopTextField(placeholder: "National ID / Residency", icon: "person.text.rectangle.fill", text: $nationalId, keyboardType: .numberPad)
                     YShopTextField(placeholder: "Phone Number", icon: "phone.fill", text: $phone, keyboardType: .phonePad)
 
@@ -75,6 +99,12 @@ struct CompleteProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .interactiveDismissDisabled(true)
         }
+        .onAppear {
+            if let pending = authManager.pendingGoogleProfile {
+                if let given = pending.givenName, !given.isEmpty { firstName = given }
+                if let family = pending.familyName, !family.isEmpty { surname = family }
+            }
+        }
         .sheet(isPresented: $showMapPicker) {
             MapPickerView(
                 isPresented: $showMapPicker,
@@ -102,18 +132,35 @@ struct CompleteProfileView: View {
         isSubmitting = true
         errorMessage = nil
         do {
-            try await authManager.completeProfile(
-                displayName: "\(trimmedFirst) \(trimmedSurname)",
-                surname: trimmedSurname,
-                phone: trimmedPhone,
-                nationalId: trimmedNationalId,
-                address: selectedAddress,
-                latitude: selectedLatitude != 0.0 ? selectedLatitude : nil,
-                longitude: selectedLongitude != 0.0 ? selectedLongitude : nil,
-                buildingInfo: buildingName,
-                apartmentNumber: apartmentNumber,
-                deliveryInstructions: deliveryInstructions
-            )
+            if isPendingGoogleSignup {
+                // Creates the account and a real session together — nothing
+                // was written to the database until this call succeeds.
+                try await authManager.completeGoogleSignup(
+                    phone: trimmedPhone,
+                    nationalId: trimmedNationalId,
+                    address: selectedAddress,
+                    latitude: selectedLatitude != 0.0 ? selectedLatitude : nil,
+                    longitude: selectedLongitude != 0.0 ? selectedLongitude : nil,
+                    buildingInfo: buildingName,
+                    apartmentNumber: apartmentNumber,
+                    deliveryInstructions: deliveryInstructions,
+                    firstName: trimmedFirst,
+                    surname: trimmedSurname
+                )
+            } else {
+                try await authManager.completeProfile(
+                    displayName: "\(trimmedFirst) \(trimmedSurname)",
+                    surname: trimmedSurname,
+                    phone: trimmedPhone,
+                    nationalId: trimmedNationalId,
+                    address: selectedAddress,
+                    latitude: selectedLatitude != 0.0 ? selectedLatitude : nil,
+                    longitude: selectedLongitude != 0.0 ? selectedLongitude : nil,
+                    buildingInfo: buildingName,
+                    apartmentNumber: apartmentNumber,
+                    deliveryInstructions: deliveryInstructions
+                )
+            }
             isSubmitting = false
             dismiss()
         } catch {

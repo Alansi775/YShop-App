@@ -27,6 +27,13 @@ struct VideoShowcaseItem: Identifiable {
 }
 
 struct VideoShowcaseCarousel: View {
+    // Exposed so the caller can size this view's own frame to match —
+    // bumped up from an earlier 0.78 because at that size the carousel
+    // read as small/cramped on an iPhone screen; this is still a proper
+    // cover-flow (side cards do peek in), just a much bigger, more
+    // showcase-like centerpiece.
+    static let widthFraction: CGFloat = 0.90
+
     private let items: [VideoShowcaseItem] = [
         VideoShowcaseItem(filename: "hero1", title: "Featured Selection", subtitle: "Handpicked for You"),
         VideoShowcaseItem(filename: "hero2", title: "New Arrivals", subtitle: "Fresh on YShop"),
@@ -37,9 +44,17 @@ struct VideoShowcaseCarousel: View {
 
     var body: some View {
         GeometryReader { geo in
-            let cardWidth = geo.size.width * 0.78
+            let cardWidth = geo.size.width * Self.widthFraction
             let cardHeight = cardWidth * 9 / 16
             let spacing: CGFloat = 12
+            // The HStack lays out all cards and is naturally centered on
+            // its OWN middle item (index (count-1)/2), not on `currentIndex`.
+            // Shifting by just `-currentIndex * step` only cancels that out
+            // when currentIndex happens to equal the middle — otherwise the
+            // "active" card ends up sitting off to one side instead of
+            // centered. This offset re-centers whichever card is actually
+            // current, for any index.
+            let middleIndex = Double(items.count - 1) / 2.0
 
             VStack(spacing: 14) {
                 ZStack {
@@ -53,7 +68,7 @@ struct VideoShowcaseCarousel: View {
                         }
                     }
                     .frame(width: geo.size.width, alignment: .center)
-                    .offset(x: -CGFloat(currentIndex) * (cardWidth + spacing))
+                    .offset(x: CGFloat(middleIndex - Double(currentIndex)) * (cardWidth + spacing))
                     .animation(.easeOut(duration: 0.45), value: currentIndex)
 
                     HStack {
@@ -64,6 +79,21 @@ struct VideoShowcaseCarousel: View {
                 }
                 .frame(width: geo.size.width, height: cardHeight)
                 .clipped()
+                .contentShape(Rectangle())
+                // Own swipe, scoped to just this card area — the caller
+                // (HomeView) attaches its own category-swipe gesture only
+                // to the hero block above, never to this view, so the two
+                // never fight over the same drag. simultaneousGesture keeps
+                // this from blocking the page's vertical ScrollView too.
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 20)
+                        .onEnded { value in
+                            let h = value.translation.width
+                            let v = value.translation.height
+                            guard abs(h) > abs(v), abs(h) > 40 else { return }
+                            go(h < 0 ? 1 : -1)
+                        }
+                )
 
                 HStack(spacing: 6) {
                     ForEach(items.indices, id: \.self) { i in

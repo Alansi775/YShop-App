@@ -33,6 +33,7 @@ struct HomeView: View {
     @State private var showCartSheet = false
     @State private var selectedCategory: String = ""
     @State private var navigateToCategoryStores = false
+    @State private var showLoginScreen = false
 
     let heroProducts = [
         HeroProduct(name: "PREMIUM FOOD",  subtitle: "Gourmet Excellence",  imagePath: "9",    gradient: [Color(red: 0.16, green: 0.09, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)], category: "Food",     icon: "fork.knife"),
@@ -69,7 +70,15 @@ struct HomeView: View {
             ProfileSheetView(isPresented: $showProfileSheet, onMyOrders: {
                 shouldPresentMyOrdersAfterProfileDismiss = true
                 showProfileSheet = false
+            }, onSignIn: {
+                showProfileSheet = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showLoginScreen = true
+                }
             })
+        }
+        .fullScreenCover(isPresented: $showLoginScreen) {
+            LoginView()
         }
         .sheet(isPresented: $showMyOrdersSheet) {
             NavigationStack {
@@ -115,7 +124,13 @@ struct HomeView: View {
 
     private var legacyView: some View {
         ZStack {
-            heroPageContent(heroProducts[currentHeroIndex])
+            heroPageContent(heroProducts[currentHeroIndex], onHorizontalSwipe: { width in
+                if width > 50 {
+                    changeProduct((currentHeroIndex - 1 + heroProducts.count) % heroProducts.count)
+                } else if width < -50 {
+                    changeProduct((currentHeroIndex + 1) % heroProducts.count)
+                }
+            })
         }
         .overlay(alignment: .bottom) {
             AppleStretchyTabBar(
@@ -137,24 +152,16 @@ struct HomeView: View {
             }
         }
         .toolbar(.hidden, for: .bottomBar)
-        .gesture(DragGesture().onEnded { value in
-            if value.translation.width > 50 {
-                changeProduct((currentHeroIndex - 1 + heroProducts.count) % heroProducts.count)
-            } else if value.translation.width < -50 {
-                changeProduct((currentHeroIndex + 1) % heroProducts.count)
-            }
-        })
     }
 
     // MARK: - Hero Page (iOS 18 Tab content)
 
     @available(iOS 18.0, *)
     private func heroPage(_ hero: HeroProduct, index: Int) -> some View {
-        heroPageContent(hero)
-        .gesture(DragGesture().onEnded { value in
-            if value.translation.width > 50 {
+        heroPageContent(hero, onHorizontalSwipe: { width in
+            if width > 50 {
                 changeProduct((index - 1 + heroProducts.count) % heroProducts.count)
-            } else if value.translation.width < -50 {
+            } else if width < -50 {
                 changeProduct((index + 1) % heroProducts.count)
             }
         })
@@ -163,7 +170,7 @@ struct HomeView: View {
     // MARK: - Hero Content (shared)
 
     @ViewBuilder
-    private func heroPageContent(_ hero: HeroProduct) -> some View {
+    private func heroPageContent(_ hero: HeroProduct, onHorizontalSwipe: @escaping (CGFloat) -> Void) -> some View {
         ZStack {
             LinearGradient(
                 gradient: Gradient(colors: hero.gradient),
@@ -171,69 +178,111 @@ struct HomeView: View {
             )
             .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                Spacer()
+            // The hero itself stays a fixed, full-bleed screen (unchanged
+            // look) — the video showcase now lives below it as its own
+            // section the user scrolls down to reach, rather than being
+            // squeezed into the fixed hero layout. GeometryReader (not
+            // UIScreen.main.bounds.height) sizes the hero block, because the
+            // screen bounds include the status bar/toolbar/tab bar areas
+            // that this ScrollView's content doesn't actually get — using
+            // the screen height directly made the hero taller than the
+            // visible page, pushing Explore/the hero text below the fold.
+            GeometryReader { outerGeo in
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        VStack(spacing: 0) {
+                            Spacer()
 
-                Text("YSHOP")
-                    .font(.system(size: 42, weight: .semibold))
-                    .tracking(4)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 80)
+                            Text("YSHOP")
+                                .font(.system(size: 42, weight: .semibold))
+                                .tracking(4)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 80)
 
-                Spacer()
+                            Spacer()
 
-                if let uiImage = UIImage(named: hero.imagePath) {
-                    Image(uiImage: uiImage)
-                        .resizable().scaledToFit()
-                        .frame(height: UIScreen.main.bounds.height * 0.16)
-                } else {
-                    VStack(spacing: 12) {
-                        Image(systemName: "photo.fill")
-                            .font(.system(size: 48))
-                            .foregroundColor(Color(.tertiaryLabel))
-                        Text(hero.imagePath)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(Color(.secondaryLabel))
+                            if let uiImage = UIImage(named: hero.imagePath) {
+                                Image(uiImage: uiImage)
+                                    .resizable().scaledToFit()
+                                    .frame(height: UIScreen.main.bounds.height * 0.16)
+                            } else {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "photo.fill")
+                                        .font(.system(size: 48))
+                                        .foregroundColor(Color(.tertiaryLabel))
+                                    Text(hero.imagePath)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(Color(.secondaryLabel))
+                                }
+                                .frame(height: UIScreen.main.bounds.height * 0.16)
+                            }
+
+                            Spacer()
+
+                            // AI Ask Bar
+                            AIAskBar { showAISheet = true }
+                                .padding(.horizontal, 24)
+
+                            Spacer()
+
+                            VStack(spacing: 16) {
+                                Text(hero.name)
+                                    .font(.system(size: 42, weight: .light))
+                                    .tracking(3)
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.center)
+
+                                Text(hero.subtitle)
+                                    .font(.system(size: 14, weight: .regular))
+                                    .tracking(1.5)
+                                    .foregroundColor(.white.opacity(0.7))
+
+                                ExploreButton {
+                                    selectedCategory = hero.category
+                                    navigateToCategoryStores = true
+                                }
+                                .padding(.top, 12)
+                            }
+
+                            Spacer().frame(height: 40)
+                        }
+                        .frame(height: outerGeo.size.height)
+                        .contentShape(Rectangle())
+                        // Scoped to JUST the hero block — the video section
+                        // below has its own independent swipe gesture, so a
+                        // drag over the videos never also changes category.
+                        // simultaneousGesture (not gesture) so the
+                        // ScrollView's own vertical pan still works here too.
+                        .simultaneousGesture(DragGesture().onEnded { value in
+                            onHorizontalSwipe(value.translation.width)
+                        })
+
+                        videoSection
                     }
-                    .frame(height: UIScreen.main.bounds.height * 0.16)
                 }
-
-                Spacer()
-
-                VideoShowcaseCarousel()
-                    .frame(height: UIScreen.main.bounds.width * 0.78 * 9 / 16 + 24)
-
-                Spacer()
-
-                // AI Ask Bar
-                AIAskBar { showAISheet = true }
-                    .padding(.horizontal, 24)
-
-                Spacer()
-
-                VStack(spacing: 16) {
-                    Text(hero.name)
-                        .font(.system(size: 42, weight: .light))
-                        .tracking(3)
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-
-                    Text(hero.subtitle)
-                        .font(.system(size: 14, weight: .regular))
-                        .tracking(1.5)
-                        .foregroundColor(.white.opacity(0.7))
-
-                    ExploreButton {
-                        selectedCategory = hero.category
-                        navigateToCategoryStores = true
-                    }
-                    .padding(.top, 12)
-                }
-
-                Spacer().frame(height: 40)
             }
         }
+    }
+
+    private var videoSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("WATCH & SHOP")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(2)
+                    .foregroundColor(.white.opacity(0.5))
+                Text("See It In Action")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .padding(.horizontal, 20)
+
+            VideoShowcaseCarousel()
+                .frame(height: UIScreen.main.bounds.width * VideoShowcaseCarousel.widthFraction * 9 / 16 + 24)
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 48)
     }
 
     // MARK: - Helpers

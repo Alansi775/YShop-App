@@ -2,8 +2,9 @@ import SwiftUI
 
 struct ProfileView: View {
     @State private var showProfileSheet = false
+    @State private var showLoginScreen = false
     @EnvironmentObject var authManager: AuthManager
-    
+
     var body: some View {
         VStack(spacing: 20) {
             Text("Welcome, \(authManager.currentUser?.name ?? "Customer")!")
@@ -31,10 +32,18 @@ struct ProfileView: View {
             Spacer()
         }
         .sheet(isPresented: $showProfileSheet) {
-            ProfileSheetView(isPresented: $showProfileSheet) {
+            ProfileSheetView(isPresented: $showProfileSheet, onMyOrders: {
                 // Action when "My Orders" is tapped in the sheet
                 print("Navigate to My Orders")
-            }
+            }, onSignIn: {
+                showProfileSheet = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showLoginScreen = true
+                }
+            })
+        }
+        .fullScreenCover(isPresented: $showLoginScreen) {
+            LoginView()
         }
     }
 }
@@ -78,11 +87,17 @@ struct ProfileSheetView: View {
     @EnvironmentObject var authManager: AuthManager
     @Binding var isPresented: Bool
     let onMyOrders: () -> Void
+    /// Called when a guest taps "Sign In / Create Account". Presenting
+    /// LoginView from HERE via a local `.fullScreenCover` doesn't work
+    /// reliably: this view is itself inside a `.sheet`, and dismissing that
+    /// sheet (isPresented = false) tears this view down before the cover
+    /// gets a chance to appear. The caller — which persists across the
+    /// sheet's own dismissal — owns the actual navigation.
+    var onSignIn: () -> Void = {}
 
     @Environment(\.colorScheme) var colorScheme
     @State private var glowScale: CGFloat = 0.98
     @State private var glowOpacity: Double = 0.2
-    @State private var showLoginScreen = false
 
     var body: some View {
         ZStack {
@@ -211,9 +226,6 @@ struct ProfileSheetView: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .fullScreenCover(isPresented: $showLoginScreen) {
-            LoginView()
-        }
     }
 
     private var guestContent: some View {
@@ -244,12 +256,7 @@ struct ProfileSheetView: View {
                     .multilineTextAlignment(.center)
             }
 
-            Button(action: {
-                isPresented = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    showLoginScreen = true
-                }
-            }) {
+            Button(action: onSignIn) {
                 Text("Sign In / Create Account")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(colorScheme == .dark ? .black : .white)
