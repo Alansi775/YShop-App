@@ -133,6 +133,12 @@ struct HomeView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        // Same as ProductDetailView/CartView/CheckoutView — without this the
+        // navigation bar gets iOS's default opaque/blurred material behind
+        // the profile+cart icons, which becomes visible (and looks like a
+        // solid bar cutting off content, e.g. "YSHOP" sliding behind it) the
+        // moment anything scrolls underneath it.
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 NativeCircleIconButton(systemName: "person.fill", action: { showProfileSheet = true })
@@ -166,6 +172,7 @@ struct HomeView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 20)
         }
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 NativeCircleIconButton(systemName: "person.fill", action: { showProfileSheet = true })
@@ -302,17 +309,21 @@ struct HomeView: View {
                 .frame(height: outerGeo.size.height, alignment: .top)
                 .clipped()
                 .contentShape(Rectangle())
-                // True free-following scroll — the content tracks the
-                // finger 1:1 (clamped), stopping wherever released, like a
-                // normal ScrollView with no momentum. Deliberately NOT using
-                // DragGesture's `.updating()` + `@GestureState`: that
-                // combination silently never fired in this nested-TabView
-                // layout. Plain `.onChanged`/`.onEnded` mutating ordinary
-                // `@State` directly is a simpler, more primitive delivery
-                // path, so it's the next thing to try — if THIS also
-                // doesn't track live, the nested TabView is dropping ALL
-                // continuous drag updates, not just the GestureState ones,
-                // and this needs a structural fix instead.
+                // Free-following scroll — the content tracks the finger,
+                // clamped, then eases toward the predicted resting point on
+                // release using the drag's own velocity (predictedEndTranslation
+                // — the same signal a real ScrollView's deceleration is
+                // based on), instead of stopping dead where the finger lifted.
+                // Deliberately NOT using DragGesture's `.updating()` +
+                // `@GestureState`: that combination silently never fired in
+                // this nested-TabView layout. Plain `.onChanged`/`.onEnded`
+                // mutating ordinary `@State` directly is a simpler, more
+                // primitive delivery path that does fire reliably here.
+                // Each live update is wrapped in a fast interactiveSpring
+                // rather than assigned raw — an un-animated 1:1 assignment
+                // reads as mechanical/"jumpy" even when the values track
+                // perfectly, since there's no interpolation between
+                // consecutive touch samples.
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 8)
                         .onChanged { value in
@@ -323,12 +334,24 @@ struct HomeView: View {
                                 isDraggingHeroVertically = true
                                 heroDragStartOffset = heroScrollOffset
                             }
+                            guard isDraggingHeroVertically else { return }
                             let proposed = heroDragStartOffset + v
-                            heroScrollOffset = min(0, max(-videoSectionHeight, proposed))
-                            handleHeroScrollOffset(heroScrollOffset)
+                            let clamped = min(0, max(-videoSectionHeight, proposed))
+                            withAnimation(.interactiveSpring(response: 0.15, dampingFraction: 0.86, blendDuration: 0)) {
+                                heroScrollOffset = clamped
+                            }
+                            handleHeroScrollOffset(clamped)
                         }
-                        .onEnded { _ in
-                            isDraggingHeroVertically = false
+                        .onEnded { value in
+                            defer { isDraggingHeroVertically = false }
+                            guard isDraggingHeroVertically else { return }
+                            let predictedV = value.predictedEndTranslation.height
+                            let proposed = heroDragStartOffset + predictedV
+                            let clamped = min(0, max(-videoSectionHeight, proposed))
+                            withAnimation(.interactiveSpring(response: 0.45, dampingFraction: 0.86, blendDuration: 0.2)) {
+                                heroScrollOffset = clamped
+                            }
+                            handleHeroScrollOffset(clamped)
                         }
                 )
             }
