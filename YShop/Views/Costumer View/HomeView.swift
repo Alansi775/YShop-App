@@ -36,6 +36,16 @@ struct HomeView: View {
     @State private var showLoginScreen = false
     @State private var resumeAIAfterLogin = false
     @State private var isScrolledToVideos = false
+    // Manual drag-driven reveal for the video section, replacing a plain
+    // ScrollView — the hero screen sits inside a TabView nested in another
+    // TabView (category pager inside the customer tab bar), and that
+    // combination silently swallows a ScrollView's native UIKit pan
+    // gesture before it ever activates, no matter how the gesture math is
+    // tuned. A plain SwiftUI DragGesture (the same mechanism the confirmed-
+    // working category swipe already uses) gets through fine, so this
+    // drives the reveal by hand instead of fighting the native ScrollView.
+    @State private var heroScrollOffset: CGFloat = 0
+    @GestureState private var heroDragState: CGFloat = 0
 
     let heroProducts = [
         HeroProduct(name: "PREMIUM FOOD",  subtitle: "Gourmet Excellence",  imagePath: "9",    gradient: [Color(red: 0.16, green: 0.09, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)], category: "Food",     icon: "fork.knife"),
@@ -143,7 +153,7 @@ struct HomeView: View {
                 } else if width < -50 {
                     changeProduct((currentHeroIndex + 1) % heroProducts.count)
                 }
-            }, onScrollOffsetChanged: handleHeroScrollOffset)
+            })
         }
         .overlay(alignment: .bottom) {
             AppleStretchyTabBar(
@@ -177,13 +187,13 @@ struct HomeView: View {
             } else if width < -50 {
                 changeProduct((index + 1) % heroProducts.count)
             }
-        }, onScrollOffsetChanged: handleHeroScrollOffset)
+        })
     }
 
     // MARK: - Hero Content (shared)
 
     @ViewBuilder
-    private func heroPageContent(_ hero: HeroProduct, onHorizontalSwipe: @escaping (CGFloat) -> Void, onScrollOffsetChanged: @escaping (CGFloat) -> Void) -> some View {
+    private func heroPageContent(_ hero: HeroProduct, onHorizontalSwipe: @escaping (CGFloat) -> Void) -> some View {
         ZStack {
             LinearGradient(
                 gradient: Gradient(colors: hero.gradient),
@@ -192,27 +202,15 @@ struct HomeView: View {
             .ignoresSafeArea()
 
             // The hero itself stays a fixed, full-bleed screen (unchanged
-            // look) — the video showcase now lives below it as its own
-            // section the user scrolls down to reach, rather than being
-            // squeezed into the fixed hero layout. GeometryReader (not
+            // look) — the video showcase lives below it, revealed by
+            // dragging up (see the gesture below). GeometryReader (not
             // UIScreen.main.bounds.height) sizes the hero block, because the
             // screen bounds include the status bar/toolbar/tab bar areas
-            // that this ScrollView's content doesn't actually get — using
-            // the screen height directly made the hero taller than the
-            // visible page, pushing Explore/the hero text below the fold.
+            // that this page doesn't actually get — using the screen height
+            // directly made the hero taller than the visible page, pushing
+            // Explore/the hero text below the fold.
             GeometryReader { outerGeo in
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        // Invisible marker reporting how far the content has
-                        // scrolled — drives the auto-rotate pause below.
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: HeroScrollOffsetKey.self,
-                                value: proxy.frame(in: .named("heroScroll")).minY
-                            )
-                        }
-                        .frame(height: 0)
-
+                VStack(spacing: 0) {
                         VStack(spacing: 0) {
                             Spacer()
 
@@ -284,19 +282,12 @@ struct HomeView: View {
                         // Scoped to JUST the hero block — the video section
                         // below has its own independent swipe gesture, so a
                         // drag over the videos never also changes category.
-                        // simultaneousGesture (not gesture) so the
-                        // ScrollView's own vertical pan still works here too.
-                        //
-                        // Critical bit: only act if the drag was actually
-                        // predominantly HORIZONTAL. The old version only
-                        // checked translation.width, so a mostly-vertical
-                        // swipe-up (trying to scroll to the videos) with
-                        // even a slight sideways drift past the 50pt
-                        // threshold got misread as a category swipe — which
-                        // swaps to a fresh page whose ScrollView resets to
-                        // the top, making it *look* like scrolling "didn't
-                        // work" when it was actually being hijacked on
-                        // nearly every attempt.
+                        // simultaneousGesture so it never blocks the
+                        // vertical drag-reveal gesture on the outer
+                        // container below. Only acts on a predominantly
+                        // HORIZONTAL drag — a vertical swipe (reaching for
+                        // the videos) with a bit of sideways drift must
+                        // never get misread as a category swipe.
                         .simultaneousGesture(DragGesture().onEnded { value in
                             let h = value.translation.width
                             let v = value.translation.height
@@ -305,12 +296,48 @@ struct HomeView: View {
                         })
 
                         videoSection
-                    }
                 }
-                .coordinateSpace(name: "heroScroll")
-                .onPreferenceChange(HeroScrollOffsetKey.self) { onScrollOffsetChanged($0) }
+                .offset(y: heroScrollOffset + heroDragState)
+                .frame(height: outerGeo.size.height, alignment: .top)
+                .clipped()
+                .contentShape(Rectangle())
+                // Drag-to-reveal: the finger directly drives the offset
+                // (clamped between fully-collapsed and fully-revealed), no
+                // momentum/inertia — simple and predictable, and critically
+                // it's a plain SwiftUI DragGesture rather than a
+                // ScrollView's native pan, so it isn't swallowed by the
+                // nested TabView the way ScrollView's gesture was.
+                .gesture(
+                    DragGesture(minimumDistance: 8)
+                        .updating($heroDragState) { value, state, _ in
+                            let h = value.translation.width
+                            let v = value.translation.height
+                            guard abs(v) >= abs(h) else { return }
+                            let proposed = heroScrollOffset + v
+                            let clamped = min(0, max(-videoSectionHeight, proposed))
+                            state = clamped - heroScrollOffset
+                        }
+                        .onEnded { value in
+                            let h = value.translation.width
+                            let v = value.translation.height
+                            guard abs(v) >= abs(h) else { return }
+                            let proposed = heroScrollOffset + v
+                            withAnimation(.interactiveSpring()) {
+                                heroScrollOffset = min(0, max(-videoSectionHeight, proposed))
+                            }
+                            handleHeroScrollOffset(heroScrollOffset)
+                        }
+                )
             }
         }
+    }
+
+    private var videoSectionHeight: CGFloat {
+        let carouselHeight = UIScreen.main.bounds.width * VideoShowcaseCarousel.widthFraction * 9 / 16 + 24
+        // Header text block + VStack spacing + top/bottom padding from
+        // videoSection below — a slightly generous estimate is fine, worst
+        // case a little empty space at the very bottom of the drag range.
+        return 120 + carouselHeight
     }
 
     private var videoSection: some View {
@@ -352,10 +379,10 @@ struct HomeView: View {
         }
     }
 
-    // Pauses the hero auto-rotate while the user has scrolled down to the
+    // Pauses the hero auto-rotate while the user has dragged down to the
     // video section — otherwise the category could change underneath them
-    // every few seconds, swapping to a different page's ScrollView (which
-    // resets to the top) and yanking them back up mid-video.
+    // every few seconds, swapping to a different (freshly-collapsed) page
+    // and yanking them back up mid-video.
     private func handleHeroScrollOffset(_ offset: CGFloat) {
         let scrolledDown = offset < -120
         guard scrolledDown != isScrolledToVideos else { return }
@@ -365,13 +392,6 @@ struct HomeView: View {
         } else {
             startAutoRotate()
         }
-    }
-}
-
-private struct HeroScrollOffsetKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 
