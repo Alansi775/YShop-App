@@ -43,7 +43,7 @@ struct ProfileView: View {
             })
         }
         .fullScreenCover(isPresented: $showLoginScreen) {
-            LoginView()
+            NavigationStack { LoginView() }
         }
     }
 }

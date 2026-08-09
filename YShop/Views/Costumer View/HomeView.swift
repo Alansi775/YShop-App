@@ -34,6 +34,7 @@ struct HomeView: View {
     @State private var selectedCategory: String = ""
     @State private var navigateToCategoryStores = false
     @State private var showLoginScreen = false
+    @State private var resumeAIAfterLogin = false
 
     let heroProducts = [
         HeroProduct(name: "PREMIUM FOOD",  subtitle: "Gourmet Excellence",  imagePath: "9",    gradient: [Color(red: 0.16, green: 0.09, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)], category: "Food",     icon: "fork.knife"),
@@ -77,8 +78,19 @@ struct HomeView: View {
                 }
             })
         }
-        .fullScreenCover(isPresented: $showLoginScreen) {
-            LoginView()
+        .fullScreenCover(isPresented: $showLoginScreen, onDismiss: {
+            // Only relevant if the login screen was opened FROM the AI ask
+            // bar — the AI needs to know who it's talking to, so a guest
+            // gets sent to sign in first and, on success, lands right back
+            // in the AI sheet instead of just returning to a blank tap.
+            if resumeAIAfterLogin {
+                resumeAIAfterLogin = false
+                if authManager.isLoggedIn {
+                    showAISheet = true
+                }
+            }
+        }) {
+            NavigationStack { LoginView() }
         }
         .sheet(isPresented: $showMyOrdersSheet) {
             NavigationStack {
@@ -188,6 +200,7 @@ struct HomeView: View {
             // the screen height directly made the hero taller than the
             // visible page, pushing Explore/the hero text below the fold.
             GeometryReader { outerGeo in
+                ScrollViewReader { scrollProxy in
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         VStack(spacing: 0) {
@@ -220,8 +233,17 @@ struct HomeView: View {
 
                             Spacer()
 
-                            // AI Ask Bar
-                            AIAskBar { showAISheet = true }
+                            // AI Ask Bar — the AI needs to know the user's
+                            // profile before it can talk to them, so guests
+                            // get routed through sign-in first.
+                            AIAskBar {
+                                if authManager.isLoggedIn {
+                                    showAISheet = true
+                                } else {
+                                    resumeAIAfterLogin = true
+                                    showLoginScreen = true
+                                }
+                            }
                                 .padding(.horizontal, 24)
 
                             Spacer()
@@ -257,9 +279,27 @@ struct HomeView: View {
                         .simultaneousGesture(DragGesture().onEnded { value in
                             onHorizontalSwipe(value.translation.width)
                         })
+                        .overlay(alignment: .bottom) {
+                            // The hero screen sits inside a TabView nested in
+                            // another TabView (category pager inside the
+                            // customer tab bar) — that combination is known
+                            // to swallow a plain swipe-up before it reaches
+                            // this ScrollView on some iOS versions, so this
+                            // tap target guarantees the videos are always
+                            // reachable even if the native swipe doesn't
+                            // register.
+                            ScrollDownHint {
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    scrollProxy.scrollTo("videoSection", anchor: .top)
+                                }
+                            }
+                            .padding(.bottom, 10)
+                        }
 
                         videoSection
+                            .id("videoSection")
                     }
+                }
                 }
             }
         }
@@ -396,6 +436,34 @@ private struct AIAskBar: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Scroll Down Hint
+
+private struct ScrollDownHint: View {
+    let action: () -> Void
+    @State private var floatDown = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Text("WATCH & SHOP")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(1.5)
+                    .foregroundColor(.white.opacity(0.55))
+                Image(systemName: "chevron.compact.down")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white.opacity(0.8))
+                    .offset(y: floatDown ? 4 : -2)
+            }
+        }
+        .buttonStyle(.plain)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                floatDown = true
+            }
+        }
     }
 }
 

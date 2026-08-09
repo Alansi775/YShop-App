@@ -197,6 +197,23 @@ struct LoginView: View {
         .onChange(of: authManager.isLoggedIn) { _, isLoggedIn in
             if isLoggedIn && !showCompleteProfile { dismiss() }
         }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // Same back-button convention as MyOrdersView/OrderTrackingView
+            // — requires this view to sit inside a NavigationStack, which
+            // every presenter (ProfileView, HomeView, ProductDetailView)
+            // now wraps it in.
+            ToolbarItem(placement: .topBarLeading) {
+                NativeCircleIconButton(
+                    systemName: "chevron.left",
+                    action: { dismiss() },
+                    iconColor: .primary,
+                    size: 35.5,
+                    iconSize: 14,
+                    showBackground: false
+                )
+            }
+        }
     }
 
     private func handleGoogleSignIn() async {

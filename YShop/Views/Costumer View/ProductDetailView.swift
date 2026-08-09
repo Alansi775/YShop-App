@@ -90,7 +90,7 @@ struct ProductDetailView: View {
                 }
             }
         }) {
-            LoginView()
+            NavigationStack { LoginView() }
         }
     }
 
