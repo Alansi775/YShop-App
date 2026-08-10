@@ -36,17 +36,6 @@ struct HomeView: View {
     @State private var showLoginScreen = false
     @State private var resumeAIAfterLogin = false
     @State private var isScrolledToVideos = false
-    // Manual drag-driven reveal for the video section, replacing a plain
-    // ScrollView — the hero screen sits inside a TabView nested in another
-    // TabView (category pager inside the customer tab bar), and that
-    // combination silently swallows a ScrollView's native UIKit pan
-    // gesture before it ever activates, no matter how the gesture math is
-    // tuned. A plain SwiftUI DragGesture (the same mechanism the confirmed-
-    // working category swipe already uses) gets through fine, so this
-    // drives the reveal by hand instead of fighting the native ScrollView.
-    @State private var heroScrollOffset: CGFloat = 0
-    @State private var heroDragStartOffset: CGFloat = 0
-    @State private var isDraggingHeroVertically = false
 
     let heroProducts = [
         HeroProduct(name: "PREMIUM FOOD",  subtitle: "Gourmet Excellence",  imagePath: "9",    gradient: [Color(red: 0.16, green: 0.09, blue: 0.06), Color(red: 0.05, green: 0.03, blue: 0.02)], category: "Food",     icon: "fork.knife"),
@@ -125,14 +114,16 @@ struct HomeView: View {
 
     @available(iOS 18.0, *)
     private var nativeTabView: some View {
-        TabView(selection: $currentHeroIndex) {
-            ForEach(Array(heroProducts.enumerated()), id: \.offset) { i, hero in
-                Tab(hero.category, systemImage: hero.icon, value: i) {
-                    heroPage(hero, index: i)
+        scrollingHomeContent {
+            TabView(selection: $currentHeroIndex) {
+                ForEach(Array(heroProducts.enumerated()), id: \.offset) { i, hero in
+                    Tab(hero.category, systemImage: hero.icon, value: i) {
+                        heroPage(hero, index: i)
+                    }
                 }
             }
+            .tabViewStyle(.sidebarAdaptable)
         }
-        .tabViewStyle(.sidebarAdaptable)
         // Same as ProductDetailView/CartView/CheckoutView — without this the
         // navigation bar gets iOS's default opaque/blurred material behind
         // the profile+cart icons, which becomes visible (and looks like a
@@ -153,7 +144,7 @@ struct HomeView: View {
     // MARK: - iOS 17 Fallback (AppleStretchyTabBar)
 
     private var legacyView: some View {
-        ZStack {
+        scrollingHomeContent {
             heroPageContent(heroProducts[currentHeroIndex], onHorizontalSwipe: { width in
                 if width > 50 {
                     changeProduct((currentHeroIndex - 1 + heroProducts.count) % heroProducts.count)
@@ -185,6 +176,40 @@ struct HomeView: View {
         .toolbar(.hidden, for: .bottomBar)
     }
 
+    // MARK: - Scrolling shell (shared)
+
+    // This is the actual fix for the video section never being reachable:
+    // a plain ScrollView, exactly like StoreDetailView's (same PreferenceKey
+    // + coordinateSpace pattern), wrapping the hero content from the
+    // OUTSIDE. Earlier attempts put the ScrollView INSIDE each hero page —
+    // i.e. as a descendant of the category-pager TabView — and that
+    // combination silently swallowed the ScrollView's native pan gesture no
+    // matter how the gesture code was tuned. Here the TabView is merely a
+    // fixed-height CHILD of the ScrollView instead of the other way around,
+    // matching how every other screen in this app (which don't sit inside a
+    // second nested TabView) already scrolls correctly.
+    @ViewBuilder
+    private func scrollingHomeContent<Hero: View>(@ViewBuilder hero: @escaping () -> Hero) -> some View {
+        GeometryReader { outerGeo in
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    hero()
+                        .frame(height: outerGeo.size.height)
+
+                    videoSection
+                }
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: HeroScrollOffsetKey.self,
+                        value: proxy.frame(in: .named("homeScroll")).minY
+                    )
+                })
+            }
+            .coordinateSpace(name: "homeScroll")
+            .onPreferenceChange(HeroScrollOffsetKey.self) { handleHeroScrollOffset($0) }
+        }
+    }
+
     // MARK: - Hero Page (iOS 18 Tab content)
 
     @available(iOS 18.0, *)
@@ -209,161 +234,84 @@ struct HomeView: View {
             )
             .ignoresSafeArea()
 
-            // The hero itself stays a fixed, full-bleed screen (unchanged
-            // look) — the video showcase lives below it, revealed by
-            // dragging up (see the gesture below). GeometryReader (not
-            // UIScreen.main.bounds.height) sizes the hero block, because the
-            // screen bounds include the status bar/toolbar/tab bar areas
-            // that this page doesn't actually get — using the screen height
-            // directly made the hero taller than the visible page, pushing
-            // Explore/the hero text below the fold.
-            GeometryReader { outerGeo in
-                VStack(spacing: 0) {
-                        VStack(spacing: 0) {
-                            Spacer()
+            VStack(spacing: 0) {
+                Spacer()
 
-                            Text("YSHOP")
-                                .font(.system(size: 42, weight: .semibold))
-                                .tracking(4)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 80)
+                Text("YSHOP")
+                    .font(.system(size: 42, weight: .semibold))
+                    .tracking(4)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 80)
 
-                            Spacer()
+                Spacer()
 
-                            if let uiImage = UIImage(named: hero.imagePath) {
-                                Image(uiImage: uiImage)
-                                    .resizable().scaledToFit()
-                                    .frame(height: UIScreen.main.bounds.height * 0.16)
-                            } else {
-                                VStack(spacing: 12) {
-                                    Image(systemName: "photo.fill")
-                                        .font(.system(size: 48))
-                                        .foregroundColor(Color(.tertiaryLabel))
-                                    Text(hero.imagePath)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(Color(.secondaryLabel))
-                                }
-                                .frame(height: UIScreen.main.bounds.height * 0.16)
-                            }
-
-                            Spacer()
-
-                            // AI Ask Bar — the AI needs to know the user's
-                            // profile before it can talk to them, so guests
-                            // get routed through sign-in first.
-                            AIAskBar {
-                                if authManager.isLoggedIn {
-                                    showAISheet = true
-                                } else {
-                                    resumeAIAfterLogin = true
-                                    showLoginScreen = true
-                                }
-                            }
-                                .padding(.horizontal, 24)
-
-                            Spacer()
-
-                            VStack(spacing: 16) {
-                                Text(hero.name)
-                                    .font(.system(size: 42, weight: .light))
-                                    .tracking(3)
-                                    .foregroundColor(.white)
-                                    .multilineTextAlignment(.center)
-
-                                Text(hero.subtitle)
-                                    .font(.system(size: 14, weight: .regular))
-                                    .tracking(1.5)
-                                    .foregroundColor(.white.opacity(0.7))
-
-                                ExploreButton {
-                                    selectedCategory = hero.category
-                                    navigateToCategoryStores = true
-                                }
-                                .padding(.top, 12)
-                            }
-
-                            Spacer().frame(height: 40)
-                        }
-                        .frame(height: outerGeo.size.height)
-                        .contentShape(Rectangle())
-                        // Scoped to JUST the hero block — the video section
-                        // below has its own independent swipe gesture, so a
-                        // drag over the videos never also changes category.
-                        // simultaneousGesture so it never blocks the
-                        // vertical drag-reveal gesture on the outer
-                        // container below. Only acts on a predominantly
-                        // HORIZONTAL drag — a vertical swipe (reaching for
-                        // the videos) with a bit of sideways drift must
-                        // never get misread as a category swipe.
-                        .simultaneousGesture(DragGesture().onEnded { value in
-                            let h = value.translation.width
-                            let v = value.translation.height
-                            guard abs(h) > abs(v) else { return }
-                            onHorizontalSwipe(h)
-                        })
-
-                        videoSection
+                if let uiImage = UIImage(named: hero.imagePath) {
+                    Image(uiImage: uiImage)
+                        .resizable().scaledToFit()
+                        .frame(height: UIScreen.main.bounds.height * 0.16)
+                } else {
+                    VStack(spacing: 12) {
+                        Image(systemName: "photo.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(Color(.tertiaryLabel))
+                        Text(hero.imagePath)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color(.secondaryLabel))
+                    }
+                    .frame(height: UIScreen.main.bounds.height * 0.16)
                 }
-                .offset(y: heroScrollOffset)
-                .frame(height: outerGeo.size.height, alignment: .top)
-                .clipped()
-                .contentShape(Rectangle())
-                // Free-following scroll — the content tracks the finger,
-                // clamped, then eases toward the predicted resting point on
-                // release using the drag's own velocity (predictedEndTranslation
-                // — the same signal a real ScrollView's deceleration is
-                // based on), instead of stopping dead where the finger lifted.
-                // Deliberately NOT using DragGesture's `.updating()` +
-                // `@GestureState`: that combination silently never fired in
-                // this nested-TabView layout. Plain `.onChanged`/`.onEnded`
-                // mutating ordinary `@State` directly is a simpler, more
-                // primitive delivery path that does fire reliably here.
-                // Each live update is wrapped in a fast interactiveSpring
-                // rather than assigned raw — an un-animated 1:1 assignment
-                // reads as mechanical/"jumpy" even when the values track
-                // perfectly, since there's no interpolation between
-                // consecutive touch samples.
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 8)
-                        .onChanged { value in
-                            let h = value.translation.width
-                            let v = value.translation.height
-                            if !isDraggingHeroVertically {
-                                guard abs(v) > abs(h) else { return }
-                                isDraggingHeroVertically = true
-                                heroDragStartOffset = heroScrollOffset
-                            }
-                            guard isDraggingHeroVertically else { return }
-                            let proposed = heroDragStartOffset + v
-                            let clamped = min(0, max(-videoSectionHeight, proposed))
-                            withAnimation(.interactiveSpring(response: 0.15, dampingFraction: 0.86, blendDuration: 0)) {
-                                heroScrollOffset = clamped
-                            }
-                            handleHeroScrollOffset(clamped)
-                        }
-                        .onEnded { value in
-                            defer { isDraggingHeroVertically = false }
-                            guard isDraggingHeroVertically else { return }
-                            let predictedV = value.predictedEndTranslation.height
-                            let proposed = heroDragStartOffset + predictedV
-                            let clamped = min(0, max(-videoSectionHeight, proposed))
-                            withAnimation(.interactiveSpring(response: 0.45, dampingFraction: 0.86, blendDuration: 0.2)) {
-                                heroScrollOffset = clamped
-                            }
-                            handleHeroScrollOffset(clamped)
-                        }
-                )
+
+                Spacer()
+
+                // AI Ask Bar — the AI needs to know the user's
+                // profile before it can talk to them, so guests
+                // get routed through sign-in first.
+                AIAskBar {
+                    if authManager.isLoggedIn {
+                        showAISheet = true
+                    } else {
+                        resumeAIAfterLogin = true
+                        showLoginScreen = true
+                    }
+                }
+                    .padding(.horizontal, 24)
+
+                Spacer()
+
+                VStack(spacing: 16) {
+                    Text(hero.name)
+                        .font(.system(size: 42, weight: .light))
+                        .tracking(3)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+
+                    Text(hero.subtitle)
+                        .font(.system(size: 14, weight: .regular))
+                        .tracking(1.5)
+                        .foregroundColor(.white.opacity(0.7))
+
+                    ExploreButton {
+                        selectedCategory = hero.category
+                        navigateToCategoryStores = true
+                    }
+                    .padding(.top, 12)
+                }
+
+                Spacer().frame(height: 40)
             }
         }
-    }
-
-    private var videoSectionHeight: CGFloat {
-        let carouselHeight = UIScreen.main.bounds.width * VideoShowcaseCarousel.widthFraction * 0.66 + 24
-        // Header text block + VStack spacing + top/bottom padding from
-        // videoSection below — a slightly generous estimate is fine, worst
-        // case a little empty space at the very bottom of the drag range.
-        return 120 + carouselHeight
+        .contentShape(Rectangle())
+        // Only acts on a predominantly HORIZONTAL drag — a vertical swipe
+        // (scrolling down to the videos) with a bit of sideways drift must
+        // never get misread as a category swipe. simultaneousGesture so it
+        // never blocks the outer ScrollView's own vertical pan.
+        .simultaneousGesture(DragGesture().onEnded { value in
+            let h = value.translation.width
+            let v = value.translation.height
+            guard abs(h) > abs(v) else { return }
+            onHorizontalSwipe(h)
+        })
     }
 
     private var videoSection: some View {
@@ -405,10 +353,10 @@ struct HomeView: View {
         }
     }
 
-    // Pauses the hero auto-rotate while the user has dragged down to the
+    // Pauses the hero auto-rotate while the user has scrolled down to the
     // video section — otherwise the category could change underneath them
-    // every few seconds, swapping to a different (freshly-collapsed) page
-    // and yanking them back up mid-video.
+    // every few seconds, swapping to a different (freshly-reset) page and
+    // yanking them back up mid-video.
     private func handleHeroScrollOffset(_ offset: CGFloat) {
         let scrolledDown = offset < -120
         guard scrolledDown != isScrolledToVideos else { return }
@@ -418,6 +366,13 @@ struct HomeView: View {
         } else {
             startAutoRotate()
         }
+    }
+}
+
+private struct HeroScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
