@@ -52,11 +52,7 @@ struct HomeView: View {
                 isActive: $navigateToCategoryStores
             ) { EmptyView() }.hidden()
 
-            if #available(iOS 18.0, *) {
-                nativeTabView
-            } else {
-                legacyView
-            }
+            homeContent
         }
         .sheet(isPresented: $showAISheet) {
             AIShoppingView()
@@ -110,19 +106,43 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - iOS 18 Native TabView
+    // MARK: - Home content (unified — no TabView anywhere in here)
 
-    @available(iOS 18.0, *)
-    private var nativeTabView: some View {
-        scrollingHomeContent {
-            TabView(selection: $currentHeroIndex) {
-                ForEach(Array(heroProducts.enumerated()), id: \.offset) { i, hero in
-                    Tab(hero.category, systemImage: hero.icon, value: i) {
-                        heroPage(hero, index: i)
+    // Previously this branched on #available(iOS 18) between a native
+    // Tab()-based hero pager and a plain-view + AppleStretchyTabBar
+    // fallback. The native TabView version was the actual, root cause of
+    // the scroll never working: a TabView's own internal gesture
+    // recognizer competes for touches landing within its bounds regardless
+    // of whether it's an ancestor or descendant of the ScrollView — moving
+    // the ScrollView outside it (previous attempt) didn't help, because the
+    // TabView still occupied the entire touch area either way. Dropping
+    // the TabView entirely for the hero pager — using only the
+    // already-confirmed-working horizontal DragGesture plus a tap-based
+    // AppleStretchyTabBar switcher, on every iOS version — removes the
+    // conflict at its root instead of working around it.
+    private var homeContent: some View {
+        ZStack {
+            homeBackground
+
+            scrollingHomeContent {
+                heroPageContent(heroProducts[currentHeroIndex], onHorizontalSwipe: { width in
+                    if width > 50 {
+                        changeProduct((currentHeroIndex - 1 + heroProducts.count) % heroProducts.count)
+                    } else if width < -50 {
+                        changeProduct((currentHeroIndex + 1) % heroProducts.count)
                     }
-                }
+                })
             }
-            .tabViewStyle(.sidebarAdaptable)
+        }
+        .overlay(alignment: .bottom) {
+            AppleStretchyTabBar(
+                selectedIndex: $currentHeroIndex,
+                icons: heroProducts.map { $0.icon }
+            ) { index in
+                changeProduct(index)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 20)
         }
         // Same as ProductDetailView/CartView/CheckoutView — without this the
         // navigation bar gets iOS's default opaque/blurred material behind
@@ -139,55 +159,33 @@ struct HomeView: View {
                 }
             }
         }
+        .toolbar(.hidden, for: .bottomBar)
     }
 
-    // MARK: - iOS 17 Fallback (AppleStretchyTabBar)
-
-    private var legacyView: some View {
-        scrollingHomeContent {
-            heroPageContent(heroProducts[currentHeroIndex], onHorizontalSwipe: { width in
-                if width > 50 {
-                    changeProduct((currentHeroIndex - 1 + heroProducts.count) % heroProducts.count)
-                } else if width < -50 {
-                    changeProduct((currentHeroIndex + 1) % heroProducts.count)
-                }
-            })
-        }
-        .overlay(alignment: .bottom) {
-            AppleStretchyTabBar(
-                selectedIndex: $currentHeroIndex,
-                icons: heroProducts.map { $0.icon }
-            ) { index in
-                changeProduct(index)
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 20)
-        }
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                NativeCircleIconButton(systemName: "person.fill", action: { showProfileSheet = true })
-                HStack(spacing: 6) {
-                    CartBadgeButton(itemCount: cartManager.itemCount, action: { showCartSheet = true }, iconColor: .white)
-                    if cartManager.itemCount > 0 { CartCountBadge(count: cartManager.itemCount) }
-                }
-            }
-        }
-        .toolbar(.hidden, for: .bottomBar)
+    // A fixed backdrop BEHIND the ScrollView (a ZStack sibling, not nested
+    // inside its scrollable content) — exactly StoreDetailView's
+    // `backgroundLayer` pattern. A gradient placed INSIDE scrollable
+    // content gets clipped to the ScrollView's own safe-area-respecting
+    // bounds even with `.ignoresSafeArea()` on it, so it never actually
+    // reaches behind the status bar/nav bar — that's what was showing the
+    // system's plain black/default background behind the profile+cart
+    // icons instead of the hero's own color.
+    private var homeBackground: some View {
+        LinearGradient(
+            gradient: Gradient(colors: heroProducts[currentHeroIndex].gradient),
+            startPoint: .top, endPoint: .bottom
+        )
+        .ignoresSafeArea()
+        .animation(.easeInOut(duration: 0.4), value: currentHeroIndex)
     }
 
     // MARK: - Scrolling shell (shared)
 
-    // This is the actual fix for the video section never being reachable:
-    // a plain ScrollView, exactly like StoreDetailView's (same PreferenceKey
-    // + coordinateSpace pattern), wrapping the hero content from the
-    // OUTSIDE. Earlier attempts put the ScrollView INSIDE each hero page —
-    // i.e. as a descendant of the category-pager TabView — and that
-    // combination silently swallowed the ScrollView's native pan gesture no
-    // matter how the gesture code was tuned. Here the TabView is merely a
-    // fixed-height CHILD of the ScrollView instead of the other way around,
-    // matching how every other screen in this app (which don't sit inside a
-    // second nested TabView) already scrolls correctly.
+    // A plain ScrollView, exactly like StoreDetailView's (same PreferenceKey
+    // + coordinateSpace pattern) — now that homeContent doesn't put a
+    // TabView anywhere near it, this is a completely ordinary ScrollView
+    // with no competing gesture recognizer nearby, same as every other
+    // scrollable screen in the app.
     @ViewBuilder
     private func scrollingHomeContent<Hero: View>(@ViewBuilder hero: @escaping () -> Hero) -> some View {
         GeometryReader { outerGeo in
@@ -210,30 +208,15 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Hero Page (iOS 18 Tab content)
-
-    @available(iOS 18.0, *)
-    private func heroPage(_ hero: HeroProduct, index: Int) -> some View {
-        heroPageContent(hero, onHorizontalSwipe: { width in
-            if width > 50 {
-                changeProduct((index - 1 + heroProducts.count) % heroProducts.count)
-            } else if width < -50 {
-                changeProduct((index + 1) % heroProducts.count)
-            }
-        })
-    }
-
     // MARK: - Hero Content (shared)
 
     @ViewBuilder
     private func heroPageContent(_ hero: HeroProduct, onHorizontalSwipe: @escaping (CGFloat) -> Void) -> some View {
+        // No background of its own — homeBackground (a fixed ZStack sibling
+        // behind the whole ScrollView) already covers this, and unlike a
+        // gradient placed here, it actually reaches behind the status/nav
+        // bar. This view is just the transparent hero content.
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: hero.gradient),
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
             VStack(spacing: 0) {
                 Spacer()
 
