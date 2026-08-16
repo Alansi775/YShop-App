@@ -102,7 +102,10 @@ struct ProductDetailView: View {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
                 showAddedToCart = true
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // Long enough to actually read and tap "View Cart", not just
+            // register that something changed — a user who doesn't already
+            // know where the cart lives needs a real window to act on it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 withAnimation(.easeOut(duration: 0.2)) {
                     showAddedToCart = false
                 }
@@ -411,31 +414,66 @@ struct ProductDetailView: View {
             }
             .padding(.horizontal, 20)
             
-            // Add to Cart Button
-            Button(action: {
-                guard authManager.isLoggedIn else {
-                    showLoginSheet = true
-                    return
+            // Add to Cart Button — splits into "Added ✓" + "View Cart" for a
+            // few seconds after adding, so the next step is an explicit tap
+            // target instead of something the user has to notice on their
+            // own (a badge on a tab bar icon they may never have looked at).
+            if showAddedToCart {
+                HStack(spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Added")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(Color.green)
+                    .cornerRadius(14)
+
+                    Button(action: { showCartSheet = true }) {
+                        HStack(spacing: 6) {
+                            Text("View Cart")
+                                .font(.system(size: 16, weight: .bold))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(Color.blue)
+                        .cornerRadius(14)
+                        .shadow(color: Color.blue.opacity(0.22), radius: 12, x: 0, y: 6)
+                    }
                 }
-                Task { await performAddToCart() }
-            }) {
-                HStack(spacing: 8) {
-                    Image(systemName: showAddedToCart ? "checkmark.circle.fill" : "bag.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text(showAddedToCart ? "Added to Cart" : "Add to Cart")
-                        .font(.system(size: 16, weight: .bold))
+                .padding(.horizontal, 16)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            } else {
+                Button(action: {
+                    guard authManager.isLoggedIn else {
+                        showLoginSheet = true
+                        return
+                    }
+                    Task { await performAddToCart() }
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bag.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Add to Cart")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(Color.blue)
+                    .cornerRadius(14)
+                    .shadow(color: Color.blue.opacity(0.22), radius: 12, x: 0, y: 6)
                 }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 54)
-                .background(showAddedToCart ? Color.green : Color.blue)
-                .cornerRadius(14)
-                .scaleEffect(showAddedToCart ? 1.01 : 1.0)
-                .shadow(color: (showAddedToCart ? Color.green : Color.blue).opacity(0.22), radius: 12, x: 0, y: 6)
+                .disabled(product.stock <= 0)
+                .opacity(product.stock <= 0 ? 0.5 : 1.0)
+                .padding(.horizontal, 16)
             }
-            .disabled(product.stock <= 0)
-            .opacity(product.stock <= 0 ? 0.5 : 1.0)
-            .padding(.horizontal, 16)
         }
         .padding(.top, 16)
         .padding(.bottom, 8)
