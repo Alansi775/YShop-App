@@ -283,6 +283,7 @@ struct HomeView: View {
                                 .padding(.top, 12)
                             }
 
+                            // Bottom padding to give the hero content some breathing room
                             Spacer().frame(height: 40)
                         }
                         .frame(height: outerGeo.size.height)
