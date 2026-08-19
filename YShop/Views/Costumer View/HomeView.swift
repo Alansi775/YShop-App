@@ -326,7 +326,7 @@ struct HomeView: View {
                 // perfectly, since there's no interpolation between
                 // consecutive touch samples.
                 .simultaneousGesture(
-                    DragGesture(minimumDistance: 8)
+                    DragGesture(minimumDistance: 8) // prevents accidental taps from triggering the drag
                         .onChanged { value in
                             let h = value.translation.width
                             let v = value.translation.height
