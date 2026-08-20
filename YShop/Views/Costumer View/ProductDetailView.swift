@@ -203,14 +203,14 @@ struct ProductDetailView: View {
     }
 
     private func productImageCell(urlString: String, index: Int) -> some View {
-        // maxWidth/maxHeight: .infinity is a *proposed*, still-flexible
-        // size — it doesn't give scaledToFill()/clipShape() a concrete
-        // number to align and crop against, which is exactly why the
-        // .top alignment wasn't actually taking effect. GeometryReader
-        // resolves the real, fixed width/height this cell has (the
-        // TabView page, or the single-image slot), and those concrete
-        // values are what make frame(alignment: .top) reliably pin the
-        // crop to the bottom instead of the top.
+        // .fill was cropping flat/square product shots (a plain t-shirt on
+        // a mostly-square photo) just as badly as it helped tall model
+        // shots — this store's catalog has genuinely mixed aspect ratios,
+        // so any crop-based fit will always mangle *some* photos. .fit
+        // guarantees 100% of every photo is visible, at the largest size
+        // that still fits the carousel frame without cropping a single
+        // pixel — the right trade-off for a storefront where the seller's
+        // photo has to be trusted as-is.
         GeometryReader { geo in
             Group {
                 if let url = URL(string: urlString) {
@@ -222,8 +222,8 @@ struct ProductDetailView: View {
                             }
                         }
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: geo.size.width, height: geo.size.height)
                         .clipShape(RoundedRectangle(cornerRadius: 24))
                 } else {
                     fallbackImageView
