@@ -188,8 +188,15 @@ struct ProductDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 300)
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .cornerRadius(16)
+        // Product photos are overwhelmingly white-background studio shots.
+        // A theme-adaptive background either turned that into a stark,
+        // sharp-cornered white block in dark mode, or let its edges melt
+        // into an equally-white light-mode background. Always-white +
+        // rounded corners + a soft shadow reads as a deliberate product
+        // card in both themes instead of either failure mode.
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
         .padding(.horizontal, 16)
     }
 
@@ -514,6 +521,15 @@ struct FullScreenImageView: View {
                                     }
                                     .resizable()
                                     .scaledToFit()
+                                    // Same reasoning as the detail screen's
+                                    // hero card: a white-background studio
+                                    // shot needs its own always-white,
+                                    // rounded, shadowed card so it doesn't
+                                    // become a stark square in dark mode or
+                                    // vanish into the backdrop in light mode.
+                                    .background(Color.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 24))
+                                    .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
                                     .padding(.horizontal, 12)
                             }
                         }
