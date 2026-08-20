@@ -221,6 +221,13 @@ struct ProductDetailView: View {
                     // blended with it anyway. The rounded corners now clip
                     // the photo's own edges directly, nothing behind it.
                     .scaledToFill()
+                    // Without an explicit frame, scaledToFill() has no
+                    // declared bounds to clip against here, so it fell
+                    // back to a plain center crop — cutting off a model's
+                    // head first. This frame gives it real bounds AND
+                    // pins alignment to the top, so any overflow trims
+                    // from the bottom instead.
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
                 fallbackImageView
             }
