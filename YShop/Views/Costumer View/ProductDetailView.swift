@@ -203,40 +203,39 @@ struct ProductDetailView: View {
     }
 
     private func productImageCell(urlString: String, index: Int) -> some View {
-        Group {
-            if let url = URL(string: urlString) {
-                KFImage(url)
-                    .placeholder {
-                        ZStack {
-                            Color(.secondarySystemBackground)
-                            ProgressView()
+        // maxWidth/maxHeight: .infinity is a *proposed*, still-flexible
+        // size — it doesn't give scaledToFill()/clipShape() a concrete
+        // number to align and crop against, which is exactly why the
+        // .top alignment wasn't actually taking effect. GeometryReader
+        // resolves the real, fixed width/height this cell has (the
+        // TabView page, or the single-image slot), and those concrete
+        // values are what make frame(alignment: .top) reliably pin the
+        // crop to the bottom instead of the top.
+        GeometryReader { geo in
+            Group {
+                if let url = URL(string: urlString) {
+                    KFImage(url)
+                        .placeholder {
+                            ZStack {
+                                Color(.secondarySystemBackground)
+                                ProgressView()
+                            }
                         }
-                    }
-                    .resizable()
-                    // .fill (not .fit) so the photo itself reaches every
-                    // edge — a white background behind a .fit image just
-                    // recreated the exact "picture taped inside a white
-                    // card" look this was meant to fix, since most product
-                    // photos aren't pure white (studio grays) and never
-                    // blended with it anyway. The rounded corners now clip
-                    // the photo's own edges directly, nothing behind it.
-                    .scaledToFill()
-                    // Without an explicit frame, scaledToFill() has no
-                    // declared bounds to clip against here, so it fell
-                    // back to a plain center crop — cutting off a model's
-                    // head first. This frame gives it real bounds AND
-                    // pins alignment to the top, so any overflow trims
-                    // from the bottom instead.
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            } else {
-                fallbackImageView
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                } else {
+                    fallbackImageView
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                }
             }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .contentShape(Rectangle())
-        .onTapGesture {
-            selectedImageIndex = index
-            showFullScreenImage = true
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedImageIndex = index
+                showFullScreenImage = true
+            }
         }
     }
     
