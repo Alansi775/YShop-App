@@ -54,6 +54,17 @@ struct ProductDetailView: View {
             }
         }
         .background(Color(.systemBackground).ignoresSafeArea())
+        .onAppear {
+            // Without this, only the currently-visible TabView page's
+            // KFImage had ever started loading — swiping to the next
+            // photo triggered its fetch at that exact moment, showing a
+            // blank placeholder that popped into the image a beat later.
+            // Kicking off every photo's download the moment this screen
+            // opens means by the time someone actually swipes, it's
+            // already sitting in Kingfisher's cache.
+            let urls = resolvedImageUrls.compactMap { URL(string: $0) }
+            ImagePrefetcher(urls: urls).start()
+        }
         .navigationTitle(product.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -188,15 +199,6 @@ struct ProductDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 300)
-        // Product photos are overwhelmingly white-background studio shots.
-        // A theme-adaptive background either turned that into a stark,
-        // sharp-cornered white block in dark mode, or let its edges melt
-        // into an equally-white light-mode background. Always-white +
-        // rounded corners + a soft shadow reads as a deliberate product
-        // card in both themes instead of either failure mode.
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
         .padding(.horizontal, 16)
     }
 
@@ -211,11 +213,19 @@ struct ProductDetailView: View {
                         }
                     }
                     .resizable()
-                    .scaledToFit()
+                    // .fill (not .fit) so the photo itself reaches every
+                    // edge — a white background behind a .fit image just
+                    // recreated the exact "picture taped inside a white
+                    // card" look this was meant to fix, since most product
+                    // photos aren't pure white (studio grays) and never
+                    // blended with it anyway. The rounded corners now clip
+                    // the photo's own edges directly, nothing behind it.
+                    .scaledToFill()
             } else {
                 fallbackImageView
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 24))
         .contentShape(Rectangle())
         .onTapGesture {
             selectedImageIndex = index
@@ -514,6 +524,12 @@ struct FullScreenImageView: View {
                     TabView(selection: $selectedIndex) {
                         ForEach(imageUrls.indices, id: \.self) { index in
                             if let url = URL(string: imageUrls[index]) {
+                                // Plain .fit against the full-bleed black/
+                                // white backdrop this screen already has —
+                                // no card/background/shadow here, this is a
+                                // dedicated "see the whole photo" viewer,
+                                // not a list card, so cropping or framing
+                                // it would work against the point of it.
                                 KFImage(url)
                                     .placeholder {
                                         ProgressView()
@@ -521,15 +537,6 @@ struct FullScreenImageView: View {
                                     }
                                     .resizable()
                                     .scaledToFit()
-                                    // Same reasoning as the detail screen's
-                                    // hero card: a white-background studio
-                                    // shot needs its own always-white,
-                                    // rounded, shadowed card so it doesn't
-                                    // become a stark square in dark mode or
-                                    // vanish into the backdrop in light mode.
-                                    .background(Color.white)
-                                    .clipShape(RoundedRectangle(cornerRadius: 24))
-                                    .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
                                     .padding(.horizontal, 12)
                             }
                         }
@@ -537,6 +544,14 @@ struct FullScreenImageView: View {
                     .tabViewStyle(.page(indexDisplayMode: imageUrls.count > 1 ? .automatic : .never))
                     .onAppear {
                         selectedIndex = min(max(initialIndex, 0), max(imageUrls.count - 1, 0))
+                        // All of these were already prefetched by
+                        // ProductDetailView the moment the product screen
+                        // opened (see its own .onAppear), so this is
+                        // usually an instant cache hit — kept as a safety
+                        // net for the rare case this viewer is reached a
+                        // different way.
+                        let urls = imageUrls.compactMap { URL(string: $0) }
+                        ImagePrefetcher(urls: urls).start()
                     }
                 }
 
