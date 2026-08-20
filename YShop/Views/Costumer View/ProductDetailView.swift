@@ -524,12 +524,11 @@ struct FullScreenImageView: View {
                     TabView(selection: $selectedIndex) {
                         ForEach(imageUrls.indices, id: \.self) { index in
                             if let url = URL(string: imageUrls[index]) {
-                                // Plain .fit against the full-bleed black/
-                                // white backdrop this screen already has —
-                                // no card/background/shadow here, this is a
-                                // dedicated "see the whole photo" viewer,
-                                // not a list card, so cropping or framing
-                                // it would work against the point of it.
+                                // .fit against the full-bleed black/white
+                                // backdrop — no background/shadow, just the
+                                // photo's own edges rounded so a bright
+                                // white studio shot doesn't sit as a sharp
+                                // 90° rectangle against the dark backdrop.
                                 KFImage(url)
                                     .placeholder {
                                         ProgressView()
@@ -537,6 +536,7 @@ struct FullScreenImageView: View {
                                     }
                                     .resizable()
                                     .scaledToFit()
+                                    .clipShape(RoundedRectangle(cornerRadius: 24))
                                     .padding(.horizontal, 12)
                             }
                         }
