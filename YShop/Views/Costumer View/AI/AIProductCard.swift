@@ -73,7 +73,9 @@ struct AIProductCard: View {
                 }
                 // id forces a fresh load if the URL changes between AI responses
                 .id(url.absoluteString)
-                .frame(width: 160, height: 130)
+                // .top keeps the crop from a tall photo trimming the
+                // bottom, not a model's head/product's top edge.
+                .frame(width: 160, height: 130, alignment: .top)
                 .clipped()
             } else {
                 placeholderIcon

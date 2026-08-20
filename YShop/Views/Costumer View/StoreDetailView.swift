@@ -193,9 +193,26 @@ struct StoreDetailView: View {
         }
     }
     
+    // "THE MENU" only makes sense for restaurants — every other store type
+    // gets wording that actually fits what it sells.
+    private var menuSectionTitle: String {
+        switch (store.storeType ?? "").trimmingCharacters(in: .whitespaces).lowercased() {
+        case "food":
+            return "THE MENU"
+        case "pharmacy":
+            return "THE PHARMACY"
+        case "clothes":
+            return "THE COLLECTION"
+        case "market":
+            return "THE MARKET"
+        default:
+            return "THE SHOP"
+        }
+    }
+
     private var productsSection: some View {
         VStack(alignment: .leading, spacing: 25) {
-            Text("THE MENU")
+            Text(menuSectionTitle)
                 .font(.system(size: 14, weight: .black))
                 .tracking(8)
                 .foregroundColor(Color(.tertiaryLabel))
@@ -274,10 +291,16 @@ struct StoreMinimalProductCard: View {
                         .overlay(Image(systemName: "photo").foregroundColor(Color(.tertiaryLabel)))
                 }
             }
-            .frame(height: 140)
-            .frame(maxWidth: .infinity)
+            // .top alignment on both frames — scaledToFill() overflows
+            // whichever dimension doesn't match the photo's own aspect
+            // ratio, and a plain center crop was cutting the top off
+            // portrait shots (a model's head, a product's top edge).
+            // Aligning top means any overflow gets trimmed from the
+            // bottom instead.
+            .frame(height: 140, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .top)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(product.name)
                     .font(.system(size: 14, weight: .semibold))
