@@ -214,6 +214,15 @@ struct ProductDetailView: View {
         GeometryReader { geo in
             Group {
                 if let url = URL(string: urlString) {
+                    // clipShape BEFORE the outer frame is the key — .fit
+                    // rarely fills geo's full width AND height at once
+                    // (that's the point of it), so rounding the full
+                    // cell-sized frame put the rounded corners out in the
+                    // transparent letterbox margin, nowhere near the
+                    // photo's own visible edges, which stayed sharp. This
+                    // rounds the photo's own tightly-fit size first, then
+                    // the frame just centers that already-rounded photo in
+                    // the cell.
                     KFImage(url)
                         .placeholder {
                             ZStack {
@@ -223,12 +232,12 @@ struct ProductDetailView: View {
                         }
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: geo.size.width, height: geo.size.height)
                         .clipShape(RoundedRectangle(cornerRadius: 24))
+                        .frame(width: geo.size.width, height: geo.size.height)
                 } else {
                     fallbackImageView
-                        .frame(width: geo.size.width, height: geo.size.height)
                         .clipShape(RoundedRectangle(cornerRadius: 24))
+                        .frame(width: geo.size.width, height: geo.size.height)
                 }
             }
             .contentShape(Rectangle())
