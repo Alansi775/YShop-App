@@ -288,7 +288,9 @@ private struct GoogleSignInButton: View {
     }
 }
 
-private struct GoogleLogoMark: View {
+// Not private — reused by the first-visit Google sign-in nudge on
+// HomeView (see GoogleSignInNudgeBanner).
+struct GoogleLogoMark: View {
     var body: some View {
         Canvas { context, size in
             let rect = CGRect(origin: .zero, size: size)

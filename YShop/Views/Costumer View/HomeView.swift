@@ -35,6 +35,7 @@ struct HomeView: View {
     @State private var navigateToCategoryStores = false
     @State private var showLoginScreen = false
     @State private var resumeAIAfterLogin = false
+    @State private var showGoogleSignInNudge = false
     @State private var isScrolledToVideos = false
     // Manual drag-driven reveal for the video section, replacing a plain
     // ScrollView — the hero screen sits inside a TabView nested in another
@@ -67,6 +68,20 @@ struct HomeView: View {
                 nativeTabView
             } else {
                 legacyView
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if showGoogleSignInNudge {
+                GoogleSignInNudgeBanner(
+                    onDismiss: { withAnimation(.easeOut(duration: 0.25)) { showGoogleSignInNudge = false } },
+                    onNeedsFullFlow: {
+                        withAnimation(.easeOut(duration: 0.25)) { showGoogleSignInNudge = false }
+                        showLoginScreen = true
+                    }
+                )
+                .padding(.top, 60)
+                .padding(.trailing, 16)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .sheet(isPresented: $showAISheet) {
@@ -114,7 +129,10 @@ struct HomeView: View {
         .sheet(isPresented: $showCartSheet) {
             CartView(showsCloseButton: true)
         }
-        .onAppear { startAutoRotate() }
+        .onAppear {
+            startAutoRotate()
+            maybeShowGoogleSignInNudge()
+        }
         .onDisappear { heroTimer?.invalidate() }
         .onReceive(NotificationCenter.default.publisher(for: .yshopOpenMyOrders)) { _ in
             showMyOrdersSheet = true
@@ -396,6 +414,23 @@ struct HomeView: View {
         startAutoRotate()
     }
 
+    // A one-time nudge for a guest who's never seen it — iOS has no
+    // equivalent to Google Identity Services' web "One Tap" card (that's a
+    // Google-rendered browser UI, nothing to build there), so this is a
+    // custom banner playing the same role: quick, dismissible, shown once.
+    private func maybeShowGoogleSignInNudge() {
+        guard !authManager.isLoggedIn else { return }
+        let key = "yshop_google_signin_nudge_shown"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                showGoogleSignInNudge = true
+            }
+        }
+    }
+
     private func startAutoRotate() {
         heroTimer?.invalidate()
         // Don't re-arm while the user is down watching videos — see
@@ -418,6 +453,95 @@ struct HomeView: View {
             heroTimer?.invalidate()
         } else {
             startAutoRotate()
+        }
+    }
+}
+
+// MARK: - Google Sign-In Nudge (first-visit-only guest reminder)
+
+private struct GoogleSignInNudgeBanner: View {
+    @EnvironmentObject var authManager: AuthManager
+    let onDismiss: () -> Void
+    let onNeedsFullFlow: () -> Void
+    @State private var isLoading = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 8) {
+                GoogleLogoMark()
+                    .frame(width: 22, height: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sign in to YSHOP")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("with Google")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                Spacer(minLength: 4)
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+            }
+
+            Button(action: signIn) {
+                Group {
+                    if isLoading {
+                        ProgressView().tint(.black)
+                    } else {
+                        Text("Continue")
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+            }
+            .background(Color.white)
+            .foregroundColor(.black)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .disabled(isLoading)
+        }
+        .padding(14)
+        .frame(width: 230)
+        .background(Color(red: 0.11, green: 0.11, blue: 0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.08), lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+    }
+
+    // Same call/UIViewController-lookup pattern as LoginView's Google
+    // button — this is a lightweight nudge, not a replacement for it, so
+    // a new-user result (needsProfileCompletion) hands off to the real
+    // LoginView/CompleteProfileView flow instead of trying to replicate it.
+    private func signIn() {
+        guard let rootVC = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?.windows.first(where: { $0.isKeyWindow })?.rootViewController
+        else { return }
+
+        isLoading = true
+        Task {
+            do {
+                let result = try await authManager.signInWithGoogle(presenting: rootVC)
+                await MainActor.run {
+                    isLoading = false
+                    if result.needsProfileCompletion {
+                        onNeedsFullFlow()
+                    } else {
+                        onDismiss()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    // Cancelled picker or a real failure — either way this
+                    // is just a nudge, not a hard-required flow, so quietly
+                    // dismiss rather than show an error over it.
+                    onDismiss()
+                }
+            }
         }
     }
 }
