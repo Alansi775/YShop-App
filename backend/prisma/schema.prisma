@@ -288,6 +288,8 @@ model Product {
   currency    String         @default("USD")
   stock       Int            @default(0)
   imageUrl    String?
+  /// 480 px version for grids and lists; imageUrl is the full 1600 px one.
+  thumbUrl    String?
   images      String[]       @default([])
   isActive    Boolean        @default(true)
   status      ApprovalStatus @default(PENDING)
