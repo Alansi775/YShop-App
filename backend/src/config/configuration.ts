@@ -15,6 +15,7 @@ export default () => ({
   },
   apple: { clientIds: list(process.env.APPLE_CLIENT_IDS) },
   google: { clientIds: list(process.env.GOOGLE_CLIENT_IDS) },
+  mediaBaseUrl: process.env.MEDIA_BASE_URL ?? '',
 });
 
 function required(key: string): string {
