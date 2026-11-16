@@ -28,6 +28,16 @@ struct SignInView: View {
     private var busy: Bool { appleBusy || googleBusy || phase != .idle }
 
     var body: some View {
+        NavigationStack {
+            content
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(isPresented: $creatingAccount) {
+                    CreateAccountView(prefilledEmail: email.trimmed)
+                }
+        }
+    }
+
+    private var content: some View {
         ScrollView {
             VStack(spacing: 0) {
                 BrandWordmark(size: 46)
@@ -117,7 +127,6 @@ struct SignInView: View {
                 .padding(.top, 8)
             }
         }
-        .sheet(isPresented: $creatingAccount) { CreateAccountView(prefilledEmail: email.trimmed) }
         .sensoryFeedback(.error, trigger: attempts)
         .sensoryFeedback(trigger: phase) { _, new in new == .success ? .success : nil }
         .onAppear { appeared = true }
