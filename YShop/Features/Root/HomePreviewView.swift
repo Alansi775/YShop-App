@@ -20,23 +20,20 @@ struct HomePreviewView: View {
                     if let error { InlineError(message: error).padding(.horizontal, 20) }
 
                     if types.count > 1 {
-                        ScrollView(.horizontal) {
-                            HStack(spacing: 10) {
-                                ForEach(types) { t in
-                                    KindChip(kind: StoreKind(t.type), selected: selected == t.type) {
-                                        withAnimation(.snappy) { selected = t.type }
-                                    }
-                                }
+                        Picker("Kind", selection: $selected) {
+                            ForEach(types) { t in
+                                Text(StoreKind(t.type).title).tag(Optional(t.type))
                             }
-                            .padding(.horizontal, 20)
                         }
-                        .scrollIndicators(.hidden)
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, 20)
                     }
 
-                    LazyVStack(spacing: 18) {
+                    LazyVStack(spacing: 0) {
                         ForEach(current) { store in
-                            Button {} label: { StoreCard(store: store) }
+                            Button {} label: { StoreRow(store: store) }
                                 .buttonStyle(PressableStoreStyle())
+                            if store.id != current.last?.id { Divider().padding(.leading, 76) }
                         }
                     }
                     .padding(.horizontal, 20)
@@ -45,7 +42,7 @@ struct HomePreviewView: View {
                 .padding(.vertical, 8)
             }
             .background(Color(.systemBackground))
-            .navigationTitle(selected.map { StoreKind($0).title } ?? "YShop")
+            .navigationTitle("YShop")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     if let user = session.user {
@@ -100,50 +97,26 @@ struct StoreKind {
     }
 }
 
-private struct KindChip: View {
-    let kind: StoreKind
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label(kind.title, systemImage: kind.symbol)
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .foregroundStyle(selected ? Color(.systemBackground) : .primary)
-                .background(selected ? Color(.label) : Color(.secondarySystemFill), in: .capsule)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct StoreCard: View {
+/// A store as one calm row: its logo, name and how much it sells.
+private struct StoreRow: View {
     let store: API.Store
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            AsyncImage(url: store.coverUrl ?? store.iconUrl, transaction: .init(animation: .smooth)) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() }
-                else { Rectangle().fill(Color(.secondarySystemFill)) }
+        HStack(spacing: 14) {
+            AsyncImage(url: store.iconUrl, transaction: .init(animation: .smooth)) { $0.image?.resizable().scaledToFill() }
+                .frame(width: 60, height: 60)
+                .background(Color(.secondarySystemFill))
+                .clipShape(.rect(cornerRadius: 16, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color(.separator).opacity(0.4), lineWidth: 0.5) }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(store.name).font(.headline).foregroundStyle(.primary)
+                Text("\(store.productCount) products").font(.subheadline).foregroundStyle(.secondary)
             }
-            .frame(height: 170)
-            .frame(maxWidth: .infinity)
-            .clipShape(.rect(cornerRadius: 22, style: .continuous))
-
-            HStack(spacing: 12) {
-                AsyncImage(url: store.iconUrl) { $0.image?.resizable().scaledToFill() }
-                    .frame(width: 40, height: 40)
-                    .background(Color(.secondarySystemFill))
-                    .clipShape(.circle)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(store.name).font(.headline).foregroundStyle(.primary)
-                    Text("\(store.productCount) products").font(.subheadline).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
-            }
+            Spacer()
+            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
         }
+        .padding(.vertical, 10)
+        .contentShape(.rect)
     }
 }
 
