@@ -16,7 +16,6 @@ struct SignInView: View {
     @State private var phase: PrimaryActionButton.Phase = .idle
     @State private var error: String?
     @State private var attempts = 0
-    @State private var appeared = false
     @State private var appleBusy = false
     @State private var googleBusy = false
     @State private var creatingAccount = false
@@ -42,7 +41,6 @@ struct SignInView: View {
             VStack(spacing: 0) {
                 BrandWordmark(size: 46)
                     .padding(.top, 56)
-                    .appear(0, appeared)
 
                 VStack(spacing: 8) {
                     Text("Welcome back")
@@ -53,18 +51,15 @@ struct SignInView: View {
                 }
                 .multilineTextAlignment(.center)
                 .padding(.top, 28)
-                .appear(1, appeared)
 
                 VStack(spacing: 12) {
                     appleButton
                     googleButton
                 }
                 .padding(.top, 36)
-                .appear(2, appeared)
 
                 OrDivider()
                     .padding(.vertical, 24)
-                    .appear(3, appeared)
 
                 FormCard {
                     FieldRow(icon: "envelope", title: "E-mail", text: $email,
@@ -80,7 +75,6 @@ struct SignInView: View {
                         .onSubmit(submit)
                 }
                 .shake(attempts)
-                .appear(4, appeared)
 
                 if let error {
                     InlineError(message: error)
@@ -92,7 +86,6 @@ struct SignInView: View {
                     .font(.subheadline.weight(.semibold))
                     .padding(.top, 22)
                     .disabled(busy)
-                    .appear(5, appeared)
 
                 Text("By continuing you agree to YShop's Terms and Privacy Policy.")
                     .font(.caption)
@@ -100,7 +93,6 @@ struct SignInView: View {
                     .multilineTextAlignment(.center)
                     .padding(.top, 28)
                     .padding(.bottom, 16)
-                    .appear(6, appeared)
             }
             .padding(.horizontal, 24)
             .frame(maxWidth: 520)
@@ -109,7 +101,7 @@ struct SignInView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollBounceBehavior(.basedOnSize)
-        .background { BrandBackground() }
+        .background(Color(.systemBackground))
         .safeAreaInset(edge: .bottom) {
             PrimaryActionButton(title: "Sign in", phase: phase, isEnabled: canSubmit && !appleBusy && !googleBusy, action: submit)
                 .padding(.horizontal, 24)
@@ -129,7 +121,6 @@ struct SignInView: View {
         }
         .sensoryFeedback(.error, trigger: attempts)
         .sensoryFeedback(trigger: phase) { _, new in new == .success ? .success : nil }
-        .onAppear { appeared = true }
         .onChange(of: email) { error = nil }
         .onChange(of: password) { error = nil }
     }

@@ -20,17 +20,10 @@ struct BrandBackground: View {
                 let t = ctx.date.timeIntervalSinceReferenceDate
                 GeometryReader { geo in
                     let w = geo.size.width
-                    ZStack {
-                        blob(.yshopGoldDynamic, size: w * 1.1,
-                             x: w * (0.25 + 0.08 * sin(t / 9)), y: 40 + 30 * cos(t / 11),
-                             opacity: dark ? 0.34 : 0.20)
-                        blob(Color(red: 0.36, green: 0.30, blue: 0.95), size: w * 0.9,
-                             x: w * (0.85 + 0.07 * cos(t / 8)), y: 10 + 40 * sin(t / 13),
-                             opacity: dark ? 0.26 : 0.13)
-                        blob(Color(red: 0.10, green: 0.75, blue: 0.80), size: w * 0.7,
-                             x: w * (0.55 + 0.10 * sin(t / 12)), y: 180 + 30 * sin(t / 7),
-                             opacity: dark ? 0.14 : 0.10)
-                    }
+                    // One quiet blue glow — Apple-white / true black stays the star.
+                    blob(.yshopGoldDynamic, size: w * 1.2,
+                         x: w * (0.5 + 0.06 * sin(t / 10)), y: 20 + 24 * cos(t / 12),
+                         opacity: dark ? 0.16 : 0.08)
                     .opacity(intensity)
                 }
             }
