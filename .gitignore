@@ -24,3 +24,12 @@ Pods/
 
 # macOS
 .DS_Store
+
+# Reference clone (design source, never committed)
+msg-deneme-flutter/
+
+# Backend
+backend/node_modules/
+backend/dist/
+backend/generated/
+backend/uploads/
