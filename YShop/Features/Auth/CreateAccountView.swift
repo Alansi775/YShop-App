@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// E-mail sign-up in one short sheet: name, e-mail, password. The server
+/// E-mail sign-up, pushed from sign-in: name, e-mail, password. The server
 /// signs the person in straight away — no "now go sign in" step.
 struct CreateAccountView: View {
     var prefilledEmail = ""
@@ -24,8 +24,7 @@ struct CreateAccountView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     Text("Your name and an e-mail — that's all it takes.")
                         .font(.body)
@@ -68,17 +67,11 @@ struct CreateAccountView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Create account")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) { dismiss() }
-                }
-            }
             .safeAreaInset(edge: .bottom) {
                 PrimaryActionButton(title: "Create account", phase: phase, isEnabled: canSubmit, action: submit)
                     .padding(.horizontal, 24)
                     .padding(.bottom, 8)
             }
-        }
         .sensoryFeedback(.error, trigger: attempts)
         .onAppear {
             email = prefilledEmail

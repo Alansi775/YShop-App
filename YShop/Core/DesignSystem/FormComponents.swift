@@ -22,7 +22,7 @@ struct PrimaryActionButton: View {
                         .transition(.blurReplace)
                 case .loading:
                     ProgressView()
-                        .tint(.white)
+                        .tint(Color(.systemBackground))
                         .transition(.blurReplace)
                 case .success:
                     Image(systemName: "checkmark")
@@ -34,6 +34,9 @@ struct PrimaryActionButton: View {
             .frame(maxWidth: .infinity, minHeight: 30)
         }
         .buttonStyle(.glassProminent)
+        // Apple's own look: black in light mode, white in dark.
+        .tint(Color(.label))
+        .foregroundStyle(Color(.systemBackground))
         .controlSize(.extraLarge)
         .disabled(!isEnabled || phase != .idle)
         .animation(.spring(duration: 0.4, bounce: 0.3), value: phase)
