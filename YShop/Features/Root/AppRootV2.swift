@@ -5,18 +5,17 @@ import SwiftUI
 struct AppRootV2: View {
     @State private var session = SessionStore.shared
     @State private var showSignIn = false
+    @State private var splashDone = false
     @AppStorage("v2.didOfferSignIn") private var didOfferSignIn = false
 
     var body: some View {
         ZStack {
-            switch session.phase {
-            case .launching:
-                BrandBackground()
-                    .overlay { BrandWordmark(size: 40) }
-                    .transition(.opacity)
-            case .guest, .signedIn:
+            if session.phase != .launching {
                 HomePreviewView(onSignIn: { showSignIn = true })
-                    .transition(.opacity)
+            }
+            if !splashDone {
+                LaunchSplash { splashDone = true }
+                    .zIndex(1)
             }
         }
         .animation(.smooth(duration: 0.5), value: session.phase)
@@ -30,6 +29,8 @@ struct AppRootV2: View {
         }
         .task {
             await session.restore()
+            // Sign-in waits until the opening shot is over.
+            while !splashDone { try? await Task.sleep(for: .milliseconds(100)) }
             // First launch: offer sign-in once; after that guests browse freely.
             if session.user == nil && !didOfferSignIn {
                 didOfferSignIn = true
