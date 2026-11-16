@@ -1,0 +1,534 @@
+// YShop — PostgreSQL schema.
+//
+// One `User` per person. Customer / store owner / driver / admin are ROLES on
+// that person, not separate login tables (the old MySQL had five: users,
+// stores, delivery_requests, yshopadmins, yshopusers — each with its own
+// password and e-mail verification). Store and driver details live in their
+// own tables, linked 1:1 to the user.
+//
+// Legacy string uids from MySQL are kept as `User.id` during migration, so
+// every foreign key carries over without remapping.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Role {
+  CUSTOMER
+  STORE_OWNER
+  DRIVER
+  ADMIN
+  SUPERADMIN
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum OrderChannel {
+  ONLINE
+  LOCAL
+}
+
+enum KitchenStatus {
+  PENDING
+  PREPARING
+  READY
+  DELIVERED
+}
+
+enum LocalPaymentMethod {
+  CASH
+  CARD
+  MIXED
+  BANK_TRANSFER
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  PREPARING
+  WAITING_PAYMENT
+  DISABLED
+}
+
+enum ComplaintStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum InteractionType {
+  AI_SHOWN
+  VIEW
+  ADD_TO_CART
+  PURCHASE
+}
+
+// ============================================================================
+// IDENTITY
+// ============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  passwordHash  String?
+  appleSub      String?   @unique
+  googleSub     String?   @unique
+
+  firstName     String?
+  lastName      String?
+  phone         String?
+  avatarUrl     String?
+  nationalId    String?
+
+  roles         Role[]    @default([CUSTOMER])
+  isBanned      Boolean   @default(false)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  addresses     Address[]
+  sessions      Session[]
+  devices       Device[]
+  emailCodes    EmailCode[]
+  cartItems     CartItem[]
+  orders        Order[]          @relation("CustomerOrders")
+  deliveries    Order[]          @relation("DriverOrders")
+  ownedStores   Store[]
+  driver        DriverProfile?
+  returns       ReturnRequest[]  @relation("CustomerReturns")
+  complaints    Complaint[]      @relation("CustomerComplaints")
+  interactions  UserInteraction[]
+  tasteProfile  TasteProfile?
+  aiMessages    AiMessage[]
+
+  @@index([createdAt])
+}
+
+/// Refresh-token session. Only a hash of the token is stored; logout or a
+/// password change revokes it, and a reused (rotated-away) token kills the
+/// whole family.
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique
+  userAgent   String?
+  ip          String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Push targets. One user can have several iPhones.
+model Device {
+  id          String   @id @default(cuid())
+  userId      String
+  apnsToken   String   @unique
+  platform    String   @default("ios")
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// 6-digit e-mail codes (verify e-mail, reset password). Hash only.
+model EmailCode {
+  id          String    @id @default(cuid())
+  userId      String
+  purpose     String
+  codeHash    String
+  attempts    Int       @default(0)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+}
+
+model Address {
+  id                   String   @id @default(cuid())
+  userId               String
+  label                String   @default("Home")
+  line                 String
+  building             String?
+  apartment            String?
+  instructions         String?
+  latitude             Decimal  @db.Decimal(10, 8)
+  longitude            Decimal  @db.Decimal(11, 8)
+  isDefault            Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model DriverProfile {
+  userId      String         @id
+  status      ApprovalStatus @default(PENDING)
+  isWorking   Boolean        @default(false)
+  latitude    Decimal?       @db.Decimal(10, 8)
+  longitude   Decimal?       @db.Decimal(11, 8)
+  locatedAt   DateTime?
+  address     String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, isWorking])
+}
+
+// ============================================================================
+// CATALOG
+// ============================================================================
+
+model Store {
+  id          Int            @id @default(autoincrement())
+  ownerId     String?
+  name        String
+  description String?
+  phone       String?
+  email       String?
+  address     String
+  latitude    Decimal?       @db.Decimal(10, 8)
+  longitude   Decimal?       @db.Decimal(11, 8)
+  iconUrl     String?
+  coverUrl    String?
+  storeType   String         @default("general")
+  status      ApprovalStatus @default(PENDING)
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  owner       User?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  products    Product[]
+  categories  StoreCategory[]
+  orders      Order[]
+  tables      PosTable[]
+  returns     ReturnRequest[]
+  complaints  Complaint[]
+
+  @@index([ownerId])
+  @@index([status, isActive])
+  @@index([storeType])
+}
+
+model Category {
+  id           Int             @id @default(autoincrement())
+  name         String
+  displayName  String?
+  description  String?
+  icon         String?
+  displayOrder Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  products     Product[]
+  stores       StoreCategory[]
+
+  @@index([name])
+}
+
+model StoreCategory {
+  storeId      Int
+  categoryId   Int
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category     Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([storeId, categoryId])
+  @@index([storeId, displayOrder])
+}
+
+model Product {
+  id          Int            @id @default(autoincrement())
+  storeId     Int
+  categoryId  Int?
+  name        String
+  description String?
+  price       Decimal        @db.Decimal(10, 2)
+  currency    String         @default("USD")
+  stock       Int            @default(0)
+  imageUrl    String?
+  images      String[]       @default([])
+  isActive    Boolean        @default(true)
+  status      ApprovalStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  store       Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category    Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  returns     ReturnRequest[]
+  embedding   ProductEmbedding?
+  interactions UserInteraction[]
+
+  @@index([storeId, status, isActive])
+  @@index([categoryId])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// CART & ORDERS
+// ============================================================================
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  productId Int
+  quantity  Int      @default(1)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+}
+
+model Order {
+  id                    Int                 @id @default(autoincrement())
+  userId                String?
+  storeId               Int
+  driverId              String?
+  status                OrderStatus         @default(PENDING)
+  channel               OrderChannel        @default(ONLINE)
+  totalPrice            Decimal             @db.Decimal(10, 2)
+  currency              String              @default("USD")
+  paymentMethod         String?
+  deliveryOption        String?
+  shippingAddress       String?
+  shippingLatitude      Decimal?            @db.Decimal(10, 8)
+  shippingLongitude     Decimal?            @db.Decimal(11, 8)
+
+  // Driver dispatch: an offer goes to one driver at a time.
+  offeredDriverId       String?
+  offerExpiresAt        DateTime?
+  skippedDriverIds      String[]            @default([])
+  driverLatitude        Decimal?            @db.Decimal(10, 8)
+  driverLongitude       Decimal?            @db.Decimal(11, 8)
+
+  liveActivityToken     String?
+
+  // POS (dine-in)
+  tableId               Int?
+  kitchenStatus         KitchenStatus?
+  kitchenUpdatedAt      DateTime?
+  localPaymentMethod    LocalPaymentMethod?
+  localPaid             Boolean             @default(false)
+  cashierNotes          String?
+
+  pickedUpAt            DateTime?
+  deliveredAt           DateTime?
+  cancelledAt           DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  user                  User?               @relation("CustomerOrders", fields: [userId], references: [id], onDelete: SetNull)
+  driver                User?               @relation("DriverOrders", fields: [driverId], references: [id], onDelete: SetNull)
+  store                 Store               @relation(fields: [storeId], references: [id])
+  table                 PosTable?           @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  items                 OrderItem[]
+  returns               ReturnRequest[]
+  complaints            Complaint[]
+
+  @@index([userId, createdAt])
+  @@index([storeId, status])
+  @@index([driverId, status])
+  @@index([offeredDriverId])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  productId   Int?
+  // Snapshot — the receipt must not change if the product is edited later.
+  name        String
+  imageUrl    String?
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  returns     ReturnRequest[]
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model PosTable {
+  id        Int         @id @default(autoincrement())
+  storeId   Int
+  name      String
+  capacity  Int         @default(4)
+  status    TableStatus @default(AVAILABLE)
+  qrToken   String      @unique
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  store     Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orders    Order[]
+
+  @@index([storeId])
+}
+
+// ============================================================================
+// AFTER-SALES
+// ============================================================================
+
+model ReturnRequest {
+  id               Int       @id @default(autoincrement())
+  orderId          Int
+  orderItemId      Int
+  productId        Int?
+  userId           String
+  storeId          Int
+  driverId         String?
+  quantity         Int       @default(1)
+  reason           String
+  photos           Json      @default("{}")
+  adminAccepted    Boolean   @default(false)
+  storeReceived    Boolean   @default(false)
+  driverPickedUpAt DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  order            Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem        OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  product          Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  user             User      @relation("CustomerReturns", fields: [userId], references: [id], onDelete: Cascade)
+  store            Store     @relation(fields: [storeId], references: [id])
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([storeId])
+  @@index([driverId])
+}
+
+model Complaint {
+  id               Int             @id @default(autoincrement())
+  orderId          Int
+  customerId       String
+  driverId         String?
+  storeId          Int?
+  type             String
+  subType          String?
+  description      String?
+  photos           String[]        @default([])
+  status           ComplaintStatus @default(PENDING)
+  adminNotes       String?
+  resolutionType   String?
+  responsibleParty String?
+  deadlineAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  order            Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer         User            @relation("CustomerComplaints", fields: [customerId], references: [id], onDelete: Cascade)
+  store            Store?          @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([customerId])
+  @@index([status])
+}
+
+// ============================================================================
+// AI / PERSONALISATION
+// ============================================================================
+
+model ProductEmbedding {
+  productId      Int      @id
+  embedding      Json
+  imageEmbedding Json?
+  model          String   @default("text-embedding-004")
+  imageModel     String?
+  updatedAt      DateTime @updatedAt
+
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model UserInteraction {
+  id        Int             @id @default(autoincrement())
+  userId    String
+  productId Int
+  storeType String?
+  type      InteractionType
+  query     String?
+  createdAt DateTime        @default(now())
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([productId, type, createdAt])
+}
+
+model TasteProfile {
+  userId            String   @id
+  tasteVector       Json?
+  storeAffinities   Json?
+  keywordAffinities Json?
+  avgPrice          Decimal? @db.Decimal(10, 2)
+  totalInteractions Int      @default(0)
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AiMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  content   String
+  products  Json?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}

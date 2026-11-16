@@ -1,0 +1,55 @@
+{
+  "name": "yshop-api",
+  "version": "2.0.0",
+  "private": true,
+  "description": "YShop API — NestJS + PostgreSQL",
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/src/main",
+    "dev": "nest start --watch",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/passport": "^11.0.5",
+    "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/swagger": "^11.4.6",
+    "@nestjs/throttler": "^6.8.0",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "argon2": "^0.45.1",
+    "bcryptjs": "^3.0.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "dotenv": "^17.4.2",
+    "google-auth-library": "^11.0.2",
+    "helmet": "^8.3.0",
+    "jose": "^6.2.12",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "pg": "^8.23.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/passport-jwt": "^4.0.1",
+    "prisma": "^7.9.1",
+    "typescript": "^5.7.3"
+  },
+  "allowScripts": {
+    "argon2@0.45.2": true,
+    "prisma@7.10.1": true
+  }
+}
