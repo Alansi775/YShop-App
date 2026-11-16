@@ -21,7 +21,10 @@ struct YShopApp: App {
     init() {
         UIFont.registerCustomFonts()
         YShopShortcutsProvider.updateAppShortcutParameters()
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        // v2 asks for notifications in context (after the first order), never at launch.
+        if !AppFlags.useV2 {
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        }
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: AppConstants.googleSignInClientID)
     }
 
@@ -33,7 +36,11 @@ struct YShopApp: App {
                     .ignoresSafeArea()
                 
                 // Main Content: always show the root coordinator (handles splash -> routing)
-                YShopRootView()
+                if AppFlags.useV2 {
+                    AppRootV2()
+                } else {
+                    YShopRootView()
+                }
                 
                 // Offline banner — a floating capsule below the notch, matching
                 // the native iOS "system alert" style (AirDrop/Live Activity
