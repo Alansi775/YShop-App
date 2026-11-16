@@ -29,7 +29,7 @@ Pods/
 msg-deneme-flutter/
 
 # Backend
-backend/node_modules/
+backend/node_modules
 backend/dist/
-backend/generated/
+backend/generated
 backend/uploads/
