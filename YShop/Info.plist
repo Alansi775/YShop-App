@@ -20,19 +20,5 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
-	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
-	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>YShop AI Assistant uses your microphone to understand voice requests</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>YShop AI Assistant converts your voice to text to answer shopping questions</string>
-	<key>NSCameraUsageDescription</key>
-	<string>YSHOP needs camera access to scan the store QR code for pickup verification</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>YSHOP needs your location for delivery tracking</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>YSHOP needs your location to set your delivery address</string>
 </dict>
 </plist>
